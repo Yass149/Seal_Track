@@ -2,19 +2,30 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocuments } from '@/context/DocumentContext';
+import { useAuth } from '@/context/AuthContext';
+import { useWallet } from '@/context/WalletContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar, FileText, Users, CheckCircle, XCircle, Clock, ArrowLeft, Pencil, Shield } from 'lucide-react';
+import { 
+  Calendar, FileText, Users, CheckCircle, XCircle, Clock, ArrowLeft, 
+  Pencil, Shield, AlertCircle 
+} from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import SignatureCanvas from '@/components/SignatureCanvas';
 
 const DocumentDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getDocument, verifyDocument } = useDocuments();
+  const { getDocument, verifyDocument, addSignature } = useDocuments();
+  const { user } = useAuth();
+  const { connected, connectWallet, signMessage } = useWallet();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('content');
+  const [signDialogOpen, setSignDialogOpen] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   
   const document = getDocument(id || '');
   
@@ -33,6 +44,14 @@ const DocumentDetail = () => {
     );
   }
 
+  // Check if current user is a signer
+  const currentUserSigner = user ? document.signers.find(signer => 
+    signer.email === user.email
+  ) : null;
+  
+  // Check if current user has already signed
+  const userHasSigned = currentUserSigner?.hasSigned || false;
+
   const getStatusBadge = () => {
     switch (document.status) {
       case 'completed':
@@ -46,8 +65,29 @@ const DocumentDetail = () => {
     }
   };
 
-  const handleVerify = () => {
-    verifyDocument(document.id);
+  const handleVerify = async () => {
+    setVerifying(true);
+    try {
+      // In a real app, this would verify the document on the blockchain
+      const isVerified = verifyDocument(document.id);
+      
+      if (!isVerified) {
+        toast({
+          variant: "destructive",
+          title: "Verification failed",
+          description: "Could not verify this document on the blockchain.",
+        });
+      }
+    } catch (error) {
+      console.error("Verification error:", error);
+      toast({
+        variant: "destructive",
+        title: "Verification error",
+        description: "An error occurred during verification.",
+      });
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const handleEdit = () => {
@@ -59,11 +99,73 @@ const DocumentDetail = () => {
   };
 
   const handleSign = () => {
-    // Navigate to signing page (to be implemented later)
-    toast({
-      title: "Signing feature",
-      description: "The signing feature will be implemented soon.",
-    });
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "Authentication required",
+        description: "Please log in to sign documents.",
+      });
+      return;
+    }
+
+    if (!currentUserSigner) {
+      toast({
+        variant: "destructive",
+        title: "Not authorized",
+        description: "You are not listed as a signer for this document.",
+      });
+      return;
+    }
+
+    if (userHasSigned) {
+      toast({
+        title: "Already signed",
+        description: "You have already signed this document.",
+      });
+      return;
+    }
+
+    // Open signature dialog
+    setSignDialogOpen(true);
+  };
+
+  const handleSaveSignature = async (signatureDataUrl: string) => {
+    try {
+      if (!user || !currentUserSigner) return;
+      
+      // If connected to wallet, sign a message for extra security
+      let signatureHash = "";
+      if (connected) {
+        try {
+          signatureHash = await signMessage(`I confirm that I am signing document ${document.id}`);
+        } catch (error) {
+          console.error("Wallet signing error:", error);
+          toast({
+            variant: "destructive",
+            title: "Signing error",
+            description: "Error while signing with wallet. Signature process canceled.",
+          });
+          return;
+        }
+      }
+      
+      // Add signature to the document
+      addSignature(document.id, currentUserSigner.id, signatureDataUrl);
+      
+      setSignDialogOpen(false);
+      
+      toast({
+        title: "Document signed",
+        description: "Your signature has been successfully added to the document.",
+      });
+    } catch (error) {
+      console.error("Error saving signature:", error);
+      toast({
+        variant: "destructive",
+        title: "Signature error",
+        description: "An error occurred while saving your signature.",
+      });
+    }
   };
 
   const totalSigners = document.signers.length;
@@ -88,14 +190,29 @@ const DocumentDetail = () => {
           <p className="text-muted-foreground mt-2">{document.description}</p>
         </div>
         <div className="flex flex-col gap-2">
-          <Button variant="outline" onClick={handleVerify} className="gap-2">
-            <Shield className="h-4 w-4" /> Verify
+          <Button 
+            variant="outline" 
+            onClick={handleVerify} 
+            className="gap-2"
+            disabled={verifying || !document.blockchainHash}
+          >
+            {verifying ? <span className="animate-spin mr-2">●</span> : <Shield className="h-4 w-4" />}
+            Verify
           </Button>
-          <Button variant="outline" onClick={handleEdit} className="gap-2" disabled={document.status === 'completed'}>
+          <Button 
+            variant="outline" 
+            onClick={handleEdit} 
+            className="gap-2" 
+            disabled={document.status === 'completed'}
+          >
             <Pencil className="h-4 w-4" /> Edit
           </Button>
-          <Button onClick={handleSign} className="gap-2" disabled={document.status === 'completed'}>
-            {document.status === 'completed' ? 'Signed' : 'Sign Document'}
+          <Button 
+            onClick={handleSign} 
+            className="gap-2" 
+            disabled={document.status === 'completed' || userHasSigned || !currentUserSigner}
+          >
+            {document.status === 'completed' || userHasSigned ? 'Signed' : 'Sign Document'}
           </Button>
         </div>
       </div>
@@ -261,6 +378,21 @@ const DocumentDetail = () => {
           </Card>
         </div>
       </div>
+
+      {/* Signature Dialog */}
+      <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sign Document</DialogTitle>
+            <DialogDescription>
+              Draw your signature below to sign this document.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <SignatureCanvas onSave={handleSaveSignature} width={400} height={200} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
