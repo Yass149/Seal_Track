@@ -14,6 +14,27 @@ const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Get user's initials for avatar fallback
+  const getUserInitials = () => {
+    if (!user) return "U";
+    
+    // Access user metadata where name might be stored
+    const metadata = user.user_metadata;
+    const name = metadata?.name || metadata?.full_name || user.email || "";
+    
+    if (name) {
+      // Get first characters of each word in the name
+      return name.split(' ')
+        .map(part => part.charAt(0))
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    
+    // If no name available, use the first two characters of the email
+    return user.email ? user.email.substring(0, 2).toUpperCase() : "U";
+  };
+
   const isActive = (path: string) => {
     return location.pathname === path;
   };
@@ -91,8 +112,8 @@ const Navbar: React.FC = () => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative rounded-full h-8 w-8 p-0">
                     <Avatar>
-                      <AvatarImage src="" alt={user.name} />
-                      <AvatarFallback>{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      <AvatarImage src="" alt={user.email || 'User'} />
+                      <AvatarFallback>{getUserInitials()}</AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
