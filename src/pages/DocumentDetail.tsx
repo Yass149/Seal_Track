@@ -1,6 +1,5 @@
-
-import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useDocuments } from '@/context/DocumentContext';
 import { useAuth } from '@/context/AuthContext';
 import { useWallet } from '@/context/WalletContext';
@@ -8,24 +7,29 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { 
   Calendar, FileText, Users, CheckCircle, XCircle, Clock, ArrowLeft, 
-  Pencil, Shield, AlertCircle 
+  Pencil, Shield, AlertCircle, Plus 
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import SignatureCanvas from '@/components/SignatureCanvas';
 
 const DocumentDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getDocument, verifyDocument, addSignature } = useDocuments();
+  const { getDocument, verifyDocument, addSignature, updateDocument } = useDocuments();
   const { user } = useAuth();
   const { connected, connectWallet, signMessage } = useWallet();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('content');
   const [signDialogOpen, setSignDialogOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [addSignerDialogOpen, setAddSignerDialogOpen] = useState(false);
+  const [newSignerName, setNewSignerName] = useState('');
+  const [newSignerEmail, setNewSignerEmail] = useState('');
   
   const document = getDocument(id || '');
   
@@ -98,7 +102,7 @@ const DocumentDetail = () => {
     });
   };
 
-  const handleSign = () => {
+  const handleSign = async () => {
     if (!user) {
       toast({
         variant: "destructive",
@@ -125,6 +129,20 @@ const DocumentDetail = () => {
       return;
     }
 
+    // First, ensure wallet is connected
+    if (!connected) {
+      try {
+        await connectWallet();
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Wallet connection required",
+          description: "Please connect your Phantom wallet to sign documents.",
+        });
+        return;
+      }
+    }
+
     // Open signature dialog
     setSignDialogOpen(true);
   };
@@ -133,31 +151,39 @@ const DocumentDetail = () => {
     try {
       if (!user || !currentUserSigner) return;
       
-      // If connected to wallet, sign a message for extra security
+      // Sign message with Phantom wallet
       let signatureHash = "";
-      if (connected) {
-        try {
-          signatureHash = await signMessage(`I confirm that I am signing document ${document.id}`);
-        } catch (error) {
-          console.error("Wallet signing error:", error);
-          toast({
-            variant: "destructive",
-            title: "Signing error",
-            description: "Error while signing with wallet. Signature process canceled.",
-          });
-          return;
-        }
+      try {
+        const messageToSign = JSON.stringify({
+          action: "sign_document",
+          document_id: document.id,
+          signer_id: currentUserSigner.id,
+          timestamp: new Date().toISOString()
+        });
+        
+        signatureHash = await signMessage(messageToSign);
+      } catch (error) {
+        console.error("Wallet signing error:", error);
+        toast({
+          variant: "destructive",
+          title: "Signing error",
+          description: "Error while signing with Phantom wallet. Please try again.",
+        });
+        return;
       }
       
-      // Add signature to the document
-      addSignature(document.id, currentUserSigner.id, signatureDataUrl);
+      // Add signature to the document with blockchain hash
+      addSignature(document.id, currentUserSigner.id, signatureDataUrl, signatureHash);
       
       setSignDialogOpen(false);
       
       toast({
-        title: "Document signed",
-        description: "Your signature has been successfully added to the document.",
+        title: "Document signed successfully",
+        description: "Your signature has been added and verified on the blockchain.",
       });
+
+      // Redirect to documents page after successful signing
+      navigate('/documents');
     } catch (error) {
       console.error("Error saving signature:", error);
       toast({
@@ -166,6 +192,47 @@ const DocumentDetail = () => {
         description: "An error occurred while saving your signature.",
       });
     }
+  };
+
+  const handleAddSigner = () => {
+    if (!newSignerName || !newSignerEmail) {
+      toast({
+        variant: "destructive",
+        title: "Invalid input",
+        description: "Please provide both name and email for the signer.",
+      });
+      return;
+    }
+
+    // Check if email is already in signers list
+    if (document.signers.some(signer => signer.email === newSignerEmail)) {
+      toast({
+        variant: "destructive",
+        title: "Duplicate signer",
+        description: "This email is already added as a signer.",
+      });
+      return;
+    }
+
+    const newSigner = {
+      id: crypto.randomUUID(),
+      name: newSignerName,
+      email: newSignerEmail,
+      hasSigned: false
+    };
+
+    updateDocument(document.id, {
+      signers: [...document.signers, newSigner]
+    });
+
+    setNewSignerName('');
+    setNewSignerEmail('');
+    setAddSignerDialogOpen(false);
+
+    toast({
+      title: "Signer added",
+      description: `${newSignerName} has been added as a signer.`,
+    });
   };
 
   const totalSigners = document.signers.length;
@@ -343,7 +410,12 @@ const DocumentDetail = () => {
               )}
             </CardContent>
             <CardFooter>
-              <Button variant="outline" className="w-full" disabled={document.status === 'completed'}>
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => setAddSignerDialogOpen(true)}
+                disabled={document.status === 'completed'}
+              >
                 <Users className="mr-2 h-4 w-4" /> Add Signers
               </Button>
             </CardFooter>
@@ -378,6 +450,47 @@ const DocumentDetail = () => {
           </Card>
         </div>
       </div>
+
+      {/* Add Signer Dialog */}
+      <Dialog open={addSignerDialogOpen} onOpenChange={setAddSignerDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Signer</DialogTitle>
+            <DialogDescription>
+              Add a new signer to this document. They will receive an invitation to sign.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={newSignerName}
+                onChange={(e) => setNewSignerName(e.target.value)}
+                placeholder="Enter signer's name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={newSignerEmail}
+                onChange={(e) => setNewSignerEmail(e.target.value)}
+                placeholder="Enter signer's email"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddSignerDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddSigner}>
+              <Plus className="mr-2 h-4 w-4" /> Add Signer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Signature Dialog */}
       <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>

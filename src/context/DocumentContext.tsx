@@ -56,7 +56,7 @@ interface DocumentContextType {
   updateDocument: (id: string, document: Partial<Document>) => void;
   deleteDocument: (id: string) => void;
   getDocument: (id: string) => Document | undefined;
-  addSignature: (documentId: string, userId: string, signatureDataUrl: string) => void;
+  addSignature: (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => void;
   verifyDocument: (documentId: string) => boolean;
   addTemplate: (template: Omit<Template, 'id' | 'createdAt'>) => string;
   updateTemplate: (id: string, template: Partial<Template>) => void;
@@ -317,38 +317,31 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return documents.find(doc => doc.id === id);
   };
 
-  const addSignature = (documentId: string, userId: string, signatureDataUrl: string) => {
+  const addSignature = (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => {
     setDocuments(prev => prev.map(doc => {
       if (doc.id === documentId) {
-        // Update the signatures object
-        const updatedSignatures = { ...doc.signatures, [userId]: signatureDataUrl };
-        
-        // Update the signers array
-        const updatedSigners = doc.signers.map(signer => 
-          signer.id === userId 
-            ? { 
-                ...signer, 
-                hasSigned: true, 
-                signatureTimestamp: new Date(),
-                signatureHash: `sign_${Math.random().toString(36).substr(2, 9)}` // Mock hash
-              } 
-            : signer
-        );
-        
+        // Find and update the signer
+        const updatedSigners = doc.signers.map(signer => {
+          if (signer.id === signerId) {
+            return {
+              ...signer,
+              hasSigned: true,
+              signatureDataUrl,
+              signatureTimestamp: new Date(),
+            };
+          }
+          return signer;
+        });
+
         // Check if all signers have signed
         const allSigned = updatedSigners.every(signer => signer.hasSigned);
-        
-        // Generate a mock blockchain hash if all have signed
-        const blockchainHash = allSigned 
-          ? `0x${Math.random().toString(36).substr(2, 64)}`
-          : doc.blockchainHash;
-        
-        return { 
-          ...doc, 
-          signatures: updatedSignatures, 
+
+        // If all signed, generate blockchain hash and mark as completed
+        return {
+          ...doc,
           signers: updatedSigners,
           status: allSigned ? 'completed' : 'pending',
-          blockchainHash,
+          blockchainHash: allSigned ? signatureHash : undefined,
           isAuthentic: allSigned ? true : undefined
         };
       }

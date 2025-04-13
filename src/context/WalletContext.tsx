@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { useToast } from "@/components/ui/use-toast";
@@ -11,8 +10,8 @@ export interface PhantomProvider {
   signMessage: (message: Uint8Array) => Promise<{ signature: Uint8Array }>;
   connect: () => Promise<{ publicKey: PublicKey }>;
   disconnect: () => Promise<void>;
-  on: (event: string, callback: (args: any) => void) => void;
-  request: (method: any, params: any) => Promise<any>;
+  on: (event: string, callback: (args: unknown) => void) => void;
+  request: (method: string, params: unknown) => Promise<unknown>;
 }
 
 interface WalletContextType {
@@ -152,8 +151,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const encodedMessage = new TextEncoder().encode(message);
       const signedMessage = await wallet.signMessage(encodedMessage);
       
-      // Convert signature to hex string
-      const signature = Buffer.from(signedMessage.signature).toString('hex');
+      // Convert signature to hex string without using Buffer
+      const signature = Array.from(signedMessage.signature)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
       
       toast({
         title: "Message signed",
