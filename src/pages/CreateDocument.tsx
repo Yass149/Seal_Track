@@ -22,7 +22,7 @@ const CreateDocument = () => {
 
   const handleTemplateChange = (value: string) => {
     setTemplateId(value);
-    if (value) {
+    if (value && value !== 'none') {
       const template = getTemplate(value);
       if (template) {
         setTitle(template.title);
@@ -44,7 +44,7 @@ const CreateDocument = () => {
         description,
         content,
         category,
-        templateId: templateId || undefined,
+        templateId: templateId !== 'none' ? templateId : undefined,
         signers: [],
       });
       
@@ -73,7 +73,7 @@ const CreateDocument = () => {
                     <SelectValue placeholder="Select a template or start from scratch" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Start from scratch</SelectItem>
+                    <SelectItem value="none">Start from scratch</SelectItem>
                     {templates.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
                         {template.title}
