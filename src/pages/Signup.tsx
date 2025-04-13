@@ -109,6 +109,7 @@ const Signup = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">Password must be at least 6 characters</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>

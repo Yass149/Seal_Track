@@ -109,8 +109,7 @@ const Login = () => {
         </Card>
 
         <div className="mt-4 text-center text-xs text-gray-500">
-          <p>For demo purposes, use:</p>
-          <p className="mt-1">Email: john@example.com | Password: password123</p>
+          <p>Use your Supabase credentials to log in.</p>
         </div>
       </div>
     </div>
