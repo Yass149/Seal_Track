@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDocuments, Document } from '@/context/DocumentContext';
@@ -8,7 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Search, PlusCircle, Clock, CheckCircle, XCircle, FileEdit, Calendar } from 'lucide-react';
-import Navbar from '@/components/Navbar';
+import DocumentItem from '@/components/DocumentItem';
 
 const Documents = () => {
   const { documents } = useDocuments();
@@ -103,34 +102,19 @@ const Documents = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredDocuments.map((doc) => (
-                <Card key={doc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/documents/${doc.id}`)}>
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{doc.title}</CardTitle>
-                      {getStatusBadge(doc.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{doc.description}</p>
-                    <div className="mt-4 flex items-center text-xs text-muted-foreground">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {new Date(doc.createdAt).toLocaleDateString()}
-                    </div>
-                  </CardContent>
-                  <CardFooter className="pt-2 border-t text-xs text-muted-foreground">
-                    <div className="w-full flex justify-between items-center">
-                      <span>{doc.category.charAt(0).toUpperCase() + doc.category.slice(1)}</span>
-                      <span>{doc.signers.length} signers</span>
-                    </div>
-                  </CardFooter>
-                </Card>
+                <div 
+                  key={doc.id} 
+                  className="cursor-pointer" 
+                  onClick={() => navigate(`/documents/${doc.id}`)}
+                >
+                  <DocumentItem document={doc} />
+                </div>
               ))}
             </div>
           )}
         </TabsContent>
         
         <TabsContent value="draft" className="mt-6">
-          {/* Same content structure as "all" tab but filtered for drafts */}
           {filteredDocuments.length === 0 ? (
             <div className="text-center py-10">
               <FileEdit className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -143,34 +127,19 @@ const Documents = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredDocuments.map((doc) => (
-                <Card key={doc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/documents/${doc.id}`)}>
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{doc.title}</CardTitle>
-                      {getStatusBadge(doc.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{doc.description}</p>
-                    <div className="mt-4 flex items-center text-xs text-muted-foreground">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {new Date(doc.createdAt).toLocaleDateString()}
-                    </div>
-                  </CardContent>
-                  <CardFooter className="pt-2 border-t text-xs text-muted-foreground">
-                    <div className="w-full flex justify-between items-center">
-                      <span>{doc.category.charAt(0).toUpperCase() + doc.category.slice(1)}</span>
-                      <span>{doc.signers.length} signers</span>
-                    </div>
-                  </CardFooter>
-                </Card>
+                <div 
+                  key={doc.id} 
+                  className="cursor-pointer" 
+                  onClick={() => navigate(`/documents/${doc.id}`)}
+                >
+                  <DocumentItem document={doc} />
+                </div>
               ))}
             </div>
           )}
         </TabsContent>
         
         <TabsContent value="pending" className="mt-6">
-          {/* Same content structure as "all" tab but filtered for pending */}
           {filteredDocuments.length === 0 ? (
             <div className="text-center py-10">
               <Clock className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -180,34 +149,19 @@ const Documents = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredDocuments.map((doc) => (
-                <Card key={doc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/documents/${doc.id}`)}>
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{doc.title}</CardTitle>
-                      {getStatusBadge(doc.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{doc.description}</p>
-                    <div className="mt-4 flex items-center text-xs text-muted-foreground">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {new Date(doc.createdAt).toLocaleDateString()}
-                    </div>
-                  </CardContent>
-                  <CardFooter className="pt-2 border-t text-xs text-muted-foreground">
-                    <div className="w-full flex justify-between items-center">
-                      <span>{doc.category.charAt(0).toUpperCase() + doc.category.slice(1)}</span>
-                      <span>{doc.signers.length} signers</span>
-                    </div>
-                  </CardFooter>
-                </Card>
+                <div 
+                  key={doc.id} 
+                  className="cursor-pointer" 
+                  onClick={() => navigate(`/documents/${doc.id}`)}
+                >
+                  <DocumentItem document={doc} />
+                </div>
               ))}
             </div>
           )}
         </TabsContent>
         
         <TabsContent value="completed" className="mt-6">
-          {/* Same content structure as "all" tab but filtered for completed */}
           {filteredDocuments.length === 0 ? (
             <div className="text-center py-10">
               <CheckCircle className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -217,27 +171,13 @@ const Documents = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredDocuments.map((doc) => (
-                <Card key={doc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/documents/${doc.id}`)}>
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{doc.title}</CardTitle>
-                      {getStatusBadge(doc.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{doc.description}</p>
-                    <div className="mt-4 flex items-center text-xs text-muted-foreground">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {new Date(doc.createdAt).toLocaleDateString()}
-                    </div>
-                  </CardContent>
-                  <CardFooter className="pt-2 border-t text-xs text-muted-foreground">
-                    <div className="w-full flex justify-between items-center">
-                      <span>{doc.category.charAt(0).toUpperCase() + doc.category.slice(1)}</span>
-                      <span>{doc.signers.length} signers</span>
-                    </div>
-                  </CardFooter>
-                </Card>
+                <div 
+                  key={doc.id} 
+                  className="cursor-pointer" 
+                  onClick={() => navigate(`/documents/${doc.id}`)}
+                >
+                  <DocumentItem document={doc} />
+                </div>
               ))}
             </div>
           )}

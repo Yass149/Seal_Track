@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Documents from "./pages/Documents";
 import CreateDocument from "./pages/CreateDocument";
+import DocumentDetail from "./pages/DocumentDetail";
 import Templates from "./pages/Templates";
 import Contacts from "./pages/Contacts";
 import Invitations from "./pages/Invitations";
@@ -56,6 +57,7 @@ const AppRoutes = () => {
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
       
       <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+      <Route path="/documents/:id" element={<ProtectedRoute><DocumentDetail /></ProtectedRoute>} />
       <Route path="/documents/create" element={<ProtectedRoute><CreateDocument /></ProtectedRoute>} />
       <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
       <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />

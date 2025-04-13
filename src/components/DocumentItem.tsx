@@ -90,12 +90,18 @@ const DocumentItem: React.FC<DocumentItemProps> = ({ document }) => {
       <CardFooter className="justify-end space-x-2">
         <Button 
           variant="outline" 
-          onClick={() => navigate(`/documents/${document.id}/view`)}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/documents/${document.id}`);
+          }}
         >
           View
         </Button>
         <Button 
-          onClick={() => navigate(`/documents/${document.id}/sign`)}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/documents/${document.id}`);
+          }}
           disabled={document.status === 'completed'}
         >
           {document.status === 'completed' ? 'Signed' : 'Sign'}
