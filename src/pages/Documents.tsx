@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDocuments, Document } from '@/context/DocumentContext';
@@ -6,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Search, PlusCircle, Clock, CheckCircle, XCircle, FileEdit } from 'lucide-react';
+import { FileText, Search, PlusCircle, Clock, CheckCircle, XCircle, FileEdit, Calendar } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
 const Documents = () => {
@@ -46,7 +47,7 @@ const Documents = () => {
       case 'pending':
         return <Badge variant="secondary" className="flex items-center gap-1"><Clock className="w-3 h-3" /> Pending</Badge>;
       case 'completed':
-        return <Badge variant="success" className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Completed</Badge>;
+        return <Badge variant="default" className="flex items-center gap-1 bg-green-600"><CheckCircle className="w-3 h-3" /> Completed</Badge>;
       case 'rejected':
         return <Badge variant="destructive" className="flex items-center gap-1"><XCircle className="w-3 h-3" /> Rejected</Badge>;
       default:
