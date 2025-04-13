@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { FileText, PenTool, Users, UserPlus, Settings, LogOut, Wallet } from 'lucide-react';
+import { FileText, PenTool, Users, UserPlus, Settings, LogOut, Wallet, PlusCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWallet } from '@/context/WalletContext';
 
@@ -22,7 +22,7 @@ const Navbar: React.FC = () => {
     <nav className="bg-white border-b border-gray-200 px-4 py-2.5 sticky top-0 z-50">
       <div className="flex flex-wrap justify-between items-center">
         <div className="flex items-center">
-          <Link to="/" className="flex items-center mr-8">
+          <Link to="/documents" className="flex items-center mr-8">
             <svg
               className="w-8 h-8 mr-2 text-docuchain-primary"
               fill="currentColor"
@@ -62,8 +62,17 @@ const Navbar: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center space-x-4">
-          {user ? (
+          {user && (
             <>
+              <Button 
+                variant="outline" 
+                className="gap-2 hidden sm:flex" 
+                onClick={() => navigate('/documents/create')}
+              >
+                <PlusCircle className="w-4 h-4" />
+                New Document
+              </Button>
+              
               {connected ? (
                 <Button variant="outline" className="gap-2 text-green-600" onClick={disconnectWallet}>
                   <Wallet className="w-4 h-4" />
@@ -101,11 +110,6 @@ const Navbar: React.FC = () => {
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
-          ) : (
-            <div className="flex space-x-2">
-              <Button variant="outline" onClick={() => navigate('/login')}>Login</Button>
-              <Button onClick={() => navigate('/signup')}>Sign Up</Button>
-            </div>
           )}
         </div>
       </div>
