@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +28,6 @@ const Contacts = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteMessage, setInviteMessage] = useState('');
   
-  // Filter contacts based on search
   const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     contact.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -95,7 +93,6 @@ const Contacts = () => {
       return;
     }
     
-    // In a real app, this would send an email invitation
     toast({
       title: "Invitation sent",
       description: `An invitation has been sent to ${inviteEmail}.`,
@@ -227,7 +224,6 @@ const Contacts = () => {
           </div>
         </div>
         
-        {/* Search */}
         <div className="mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -273,7 +269,6 @@ const Contacts = () => {
         )}
       </main>
       
-      {/* Edit Contact Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>

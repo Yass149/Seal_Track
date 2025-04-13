@@ -61,7 +61,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Try to connect if user was previously connected
       const checkConnection = async () => {
         try {
-          const response = await provider.connect({ onlyIfTrusted: true });
+          // Modified: Using provider.connect() without arguments, then checking if we get a response
+          const response = await provider.connect();
           setConnected(true);
           setPublicKey(response.publicKey.toString());
         } catch (error) {

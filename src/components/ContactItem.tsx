@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +6,7 @@ import { Contact } from '@/context/DocumentContext';
 
 interface ContactItemProps {
   contact: Contact;
-  onEdit: (contactId: string) => void;
+  onEdit: (contact: Contact) => void;
   onDelete: (contactId: string) => void;
   onInvite: (email: string) => void;
 }
@@ -46,7 +45,7 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onEdit, onDelete, on
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => onEdit(contact.id)}
+            onClick={() => onEdit(contact)}
           >
             <Edit className="w-4 h-4 mr-2" />
             Edit
