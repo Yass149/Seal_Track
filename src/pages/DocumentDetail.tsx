@@ -397,12 +397,30 @@ const DocumentDetail = () => {
                         <div>
                           <p className="font-medium">{signer.name}</p>
                           <p className="text-xs text-muted-foreground">{signer.email}</p>
+                          {signer.signatureTimestamp && (
+                            <p className="text-xs text-muted-foreground">
+                              Signed on {new Date(signer.signatureTimestamp).toLocaleString()}
+                            </p>
+                          )}
                         </div>
-                        {signer.hasSigned ? (
-                          <Badge variant="outline" className="bg-green-100 text-green-800">Signed</Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-amber-100 text-amber-800">Pending</Badge>
-                        )}
+                        <div className="flex flex-col items-end gap-1">
+                          {signer.hasSigned ? (
+                            <Badge variant="outline" className="bg-green-100 text-green-800">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Signed
+                            </Badge>
+                          ) : signer.email === user?.email ? (
+                            <Badge variant="outline" className="bg-blue-100 text-blue-800">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Your signature needed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Pending
+                            </Badge>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

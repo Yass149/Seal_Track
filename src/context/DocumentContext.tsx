@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from './AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface Signer {
   id: string;
@@ -293,15 +294,81 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return id;
   };
 
-  const updateDocument = (id: string, document: Partial<Document>) => {
-    setDocuments(prev => prev.map(doc => 
-      doc.id === id ? { ...doc, ...document } : doc
-    ));
-    
-    toast({
-      title: "Document updated",
-      description: "Your changes have been saved.",
-    });
+  const updateDocument = async (id: string, document: Partial<Document>) => {
+    try {
+      setDocuments(prev => {
+        const updatedDocs = prev.map(doc => {
+          if (doc.id === id) {
+            const updatedDoc = { ...doc, ...document };
+            
+            // If signers were updated, send notifications
+            if (document.signers) {
+              const newSigners = document.signers.filter(
+                newSigner => !doc.signers.some(
+                  existingSigner => existingSigner.email === newSigner.email
+                )
+              );
+              
+              // Send email to new signers
+              newSigners.forEach(async (signer) => {
+                try {
+                  console.log('Sending email to:', signer.email);
+                  const requestBody = {
+                    recipientEmail: signer.email,
+                    recipientName: signer.name,
+                    documentId: id,
+                    documentTitle: updatedDoc.title,
+                    documentUrl: `${window.location.origin}/documents/${id}`,
+                    requesterName: user?.user_metadata?.name || 'A user'
+                  };
+                  console.log('Request body:', requestBody);
+
+                  const { data, error } = await supabase.functions.invoke('send-signature-request', {
+                    body: requestBody
+                  });
+
+                  if (error) {
+                    console.error('Supabase function error:', error);
+                    throw error;
+                  }
+
+                  console.log('Email function response:', data);
+                } catch (error) {
+                  console.error('Failed to send email notification:', error);
+                  console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    error
+                  });
+                  toast({
+                    variant: "destructive",
+                    title: "Notification error",
+                    description: `Could not send email to ${signer.email}. Error: ${error.message}`,
+                  });
+                }
+              });
+            }
+            
+            return updatedDoc;
+          }
+          return doc;
+        });
+        
+        return updatedDocs;
+      });
+      
+      toast({
+        title: "Document updated",
+        description: "Your changes have been saved.",
+      });
+    } catch (error) {
+      console.error('Document update error:', error);
+      toast({
+        variant: "destructive",
+        title: "Update failed",
+        description: `Failed to update document: ${error.message}`,
+      });
+    }
   };
 
   const deleteDocument = (id: string) => {
