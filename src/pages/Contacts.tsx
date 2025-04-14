@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { PlusCircle, Search, Users } from 'lucide-react';
 import { useDocuments, Contact } from '@/context/DocumentContext';
 import ContactItem from '@/components/ContactItem';
-import Navbar from '@/components/Navbar';
 import { useToast } from '@/components/ui/use-toast';
 
 const Contacts = () => {
@@ -115,8 +114,6 @@ const Contacts = () => {
   
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <Navbar />
-      
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>

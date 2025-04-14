@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,7 +6,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PlusCircle, Search, FileText } from 'lucide-react';
 import { useDocuments, Template } from '@/context/DocumentContext';
 import TemplateItem from '@/components/TemplateItem';
-import Navbar from '@/components/Navbar';
 
 const Templates = () => {
   const { templates, getTemplate } = useDocuments();
@@ -35,8 +33,6 @@ const Templates = () => {
   
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <Navbar />
-      
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>

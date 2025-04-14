@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +7,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { UserPlus, Copy, Mail, Send } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import Navbar from '@/components/Navbar';
 
 const Invitations = () => {
   const [inviteeEmail, setInviteeEmail] = useState('');
@@ -53,8 +51,6 @@ const Invitations = () => {
   
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <Navbar />
-      
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
