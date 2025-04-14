@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, type FC, type ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from '@/components/ui/use-toast';
+import { type ToastProps } from '@/components/ui/toast';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -298,8 +299,8 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "An error occurred while fetching documents.",
-        });
+          description: "Failed to fetch documents"
+        } as ToastProps);
       }
     };
 
@@ -352,6 +353,11 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
           switch (payload.eventType) {
             case 'INSERT':
               setDocuments(prev => [...prev, latestDoc]);
+              toast({
+                title: "Success",
+                description: "New document added",
+                variant: "default"
+              } as ToastProps);
               break;
             
             case 'UPDATE':
@@ -362,12 +368,22 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
                     : doc
                 )
               );
+              toast({
+                title: "Success",
+                description: "Document has been completed",
+                variant: "default"
+              } as ToastProps);
               break;
             
             case 'DELETE':
               setDocuments(prev => 
                 prev.filter(doc => doc.id !== payload.old.id)
               );
+              toast({
+                title: "Info",
+                description: "Document has been deleted",
+                variant: "default"
+              } as ToastProps);
               break;
           }
 
@@ -813,10 +829,10 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
     } catch (error) {
       console.error('Error adding signature:', error);
       toast({
-        variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to add signature. Please try again.",
-      });
+        description: "Failed to add signature",
+        variant: "destructive"
+      } as ToastProps);
       throw error;
     }
   };

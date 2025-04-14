@@ -1,6 +1,5 @@
-
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useDocuments } from '@/context/DocumentContext';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,50 +7,63 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'react-hot-toast';
+import { DocumentCategory } from '@/types/document';
 
 const CreateDocument = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { addDocument, templates, getTemplate } = useDocuments();
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<'contract' | 'nda' | 'agreement' | 'other'>('contract');
-  const [templateId, setTemplateId] = useState<string>('');
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleTemplateChange = (value: string) => {
-    setTemplateId(value);
-    if (value && value !== 'none') {
-      const template = getTemplate(value);
+  useEffect(() => {
+    // Handle template selection from Documents page
+    const templateId = location.state?.templateId;
+    if (templateId) {
+      const template = templates.find(t => t.id === templateId);
       if (template) {
+        setSelectedTemplate(templateId);
         setTitle(template.title);
-        setDescription(template.description);
+        setDescription(template.description || '');
         setContent(template.content);
-        setCategory(template.category);
+        setCategory(template.category as DocumentCategory);
       }
+    }
+  }, [location.state, templates]);
+
+  const handleTemplateChange = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+      setSelectedTemplate(templateId);
+      setTitle(template.title);
+      setDescription(template.description || '');
+      setContent(template.content);
+      setCategory(template.category as DocumentCategory);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
     try {
-      // Create new document
-      const newDocId = addDocument({
+      await addDocument({
         title,
         description,
         content,
         category,
-        templateId: templateId !== 'none' ? templateId : undefined,
+        template_id: selectedTemplate !== 'none' ? selectedTemplate : undefined,
         signers: [],
       });
-      
-      // Navigate to the documents page
       navigate('/documents');
     } catch (error) {
       console.error('Error creating document:', error);
+      toast.error('Failed to create document');
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +80,7 @@ const CreateDocument = () => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="template">Use Template (Optional)</Label>
-                <Select value={templateId} onValueChange={handleTemplateChange}>
+                <Select value={selectedTemplate} onValueChange={handleTemplateChange}>
                   <SelectTrigger id="template">
                     <SelectValue placeholder="Select a template or start from scratch" />
                   </SelectTrigger>

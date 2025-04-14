@@ -8,9 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Search, PlusCircle, Clock, CheckCircle, XCircle, FileEdit, Calendar } from 'lucide-react';
 import DocumentItem from '@/components/DocumentItem';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ChevronDown } from 'lucide-react';
 
 const Documents = () => {
-  const { documents } = useDocuments();
+  const { documents, templates } = useDocuments();
   const navigate = useNavigate();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,12 +63,38 @@ const Documents = () => {
           <h1 className="text-3xl font-bold">Documents</h1>
           <p className="text-muted-foreground mt-1">Manage your documents and track signatures</p>
         </div>
-        <Button
-          className="mt-4 md:mt-0"
-          onClick={() => navigate('/documents/create')}
-        >
-          <PlusCircle className="mr-2 h-4 w-4" /> Create Document
-        </Button>
+        <div className="mt-4 md:mt-0 flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <FileText className="mr-2 h-4 w-4" />
+                Use Template
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[240px]">
+              {templates.length === 0 ? (
+                <DropdownMenuItem disabled>
+                  No templates available
+                </DropdownMenuItem>
+              ) : (
+                templates.map((template) => (
+                  <DropdownMenuItem
+                    key={template.id}
+                    onClick={() => navigate('/documents/create', { state: { templateId: template.id } })}
+                  >
+                    {template.title}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            onClick={() => navigate('/documents/create')}
+          >
+            <PlusCircle className="mr-2 h-4 w-4" /> Create Document
+          </Button>
+        </div>
       </div>
       
       <div className="mb-6">
