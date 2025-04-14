@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
+import { ethers } from 'ethers';
 import { useToast } from "@/components/ui/use-toast";
 
 export interface PhantomProvider {
@@ -16,13 +17,22 @@ export interface PhantomProvider {
 }
 
 interface WalletContextType {
-  wallet: PhantomProvider | null;
-  connected: boolean;
-  publicKey: string | null;
-  connecting: boolean;
-  connectWallet: () => Promise<void>;
-  disconnectWallet: () => Promise<void>;
-  signMessage: (message: string) => Promise<string>;
+  // Phantom wallet for signatures
+  phantomWallet: PhantomProvider | null;
+  phantomConnected: boolean;
+  phantomPublicKey: string | null;
+  phantomConnecting: boolean;
+  connectPhantomWallet: () => Promise<void>;
+  disconnectPhantomWallet: () => Promise<void>;
+  signWithPhantom: (message: string) => Promise<string>;
+
+  // MetaMask wallet for document verification
+  metamaskConnected: boolean;
+  metamaskPublicKey: string | null;
+  metamaskConnecting: boolean;
+  connectMetaMaskWallet: () => Promise<void>;
+  disconnectMetaMaskWallet: () => Promise<void>;
+  signWithMetaMask: (message: string) => Promise<string>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -53,45 +63,70 @@ const isAllowedDomain = () => {
 };
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [wallet, setWallet] = useState<PhantomProvider | null>(null);
-  const [connected, setConnected] = useState<boolean>(false);
-  const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState<boolean>(false);
+  const [phantomWallet, setPhantomWallet] = useState<PhantomProvider | null>(null);
+  const [phantomConnected, setPhantomConnected] = useState<boolean>(false);
+  const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
+  const [phantomConnecting, setPhantomConnecting] = useState<boolean>(false);
+
+  const [metamaskConnected, setMetamaskConnected] = useState<boolean>(false);
+  const [metamaskPublicKey, setMetamaskPublicKey] = useState<string | null>(null);
+  const [metamaskConnecting, setMetamaskConnecting] = useState<boolean>(false);
+
   const { toast } = useToast();
 
+  // Initialize Phantom wallet
   useEffect(() => {
     const provider = getPhantomProvider();
-    setWallet(provider);
+    setPhantomWallet(provider);
 
     if (provider) {
-      // Try to connect if user was previously connected
       const checkConnection = async () => {
         try {
           const response = await provider.connect();
-          setConnected(true);
-          setPublicKey(response.publicKey.toString());
+          setPhantomConnected(true);
+          setPhantomPublicKey(response.publicKey.toString());
         } catch (error) {
-          setConnected(false);
-          setPublicKey(null);
+          setPhantomConnected(false);
+          setPhantomPublicKey(null);
         }
       };
       
       checkConnection();
       
       provider.on('connect', (publicKey: PublicKey) => {
-        setConnected(true);
-        setPublicKey(publicKey.toString());
+        setPhantomConnected(true);
+        setPhantomPublicKey(publicKey.toString());
       });
       
       provider.on('disconnect', () => {
-        setConnected(false);
-        setPublicKey(null);
+        setPhantomConnected(false);
+        setPhantomPublicKey(null);
       });
     }
   }, []);
 
-  const connectWallet = async () => {
-    if (!wallet) {
+  // Initialize MetaMask wallet
+  useEffect(() => {
+    if (typeof window.ethereum !== 'undefined') {
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts.length === 0) {
+          setMetamaskConnected(false);
+          setMetamaskPublicKey(null);
+        } else {
+          setMetamaskConnected(true);
+          setMetamaskPublicKey(accounts[0]);
+        }
+      };
+
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      };
+    }
+  }, []);
+
+  const connectPhantomWallet = async () => {
+    if (!phantomWallet) {
       toast({
         variant: "destructive",
         title: "Phantom Wallet not found",
@@ -111,90 +146,167 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     try {
-      setConnecting(true);
-      const response = await wallet.connect();
-      setConnected(true);
-      setPublicKey(response.publicKey.toString());
+      setPhantomConnecting(true);
+      const response = await phantomWallet.connect();
+      if (!response || !response.publicKey) {
+        throw new Error('Failed to connect to Phantom wallet');
+      }
+      setPhantomConnected(true);
+      setPhantomPublicKey(response.publicKey.toString());
       
       toast({
-        title: "Wallet connected",
+        title: "Phantom Wallet connected",
         description: "Your Phantom wallet has been successfully connected.",
       });
     } catch (error) {
-      console.error('Failed to connect wallet:', error);
+      console.error('Failed to connect Phantom wallet:', error);
       toast({
         variant: "destructive",
         title: "Connection failed",
-        description: "Failed to connect to your wallet. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to connect to your Phantom wallet. Please try again.",
       });
     } finally {
-      setConnecting(false);
+      setPhantomConnecting(false);
     }
   };
 
-  const disconnectWallet = async () => {
-    if (!wallet) return;
+  const connectMetaMaskWallet = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      toast({
+        title: "MetaMask not found",
+        description: "Please install MetaMask to use this feature",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
-      await wallet.disconnect();
-      setConnected(false);
-      setPublicKey(null);
+      setMetamaskConnecting(true);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const accounts = await provider.send('eth_requestAccounts', []);
+      
+      if (accounts.length > 0) {
+        setMetamaskConnected(true);
+        setMetamaskPublicKey(accounts[0]);
+        toast({
+          title: "MetaMask Connected",
+          description: "Successfully connected to MetaMask"
+        });
+      }
+    } catch (error) {
+      console.error('Error connecting MetaMask:', error);
+      toast({
+        title: "Connection Failed",
+        description: error instanceof Error ? error.message : "Failed to connect MetaMask",
+        variant: "destructive"
+      });
+    } finally {
+      setMetamaskConnecting(false);
+    }
+  };
+
+  const disconnectPhantomWallet = async () => {
+    if (!phantomWallet) return;
+
+    try {
+      await phantomWallet.disconnect();
+      setPhantomConnected(false);
+      setPhantomPublicKey(null);
       
       toast({
-        title: "Wallet disconnected",
-        description: "Your wallet has been disconnected.",
+        title: "Phantom Wallet disconnected",
+        description: "Your Phantom wallet has been disconnected.",
       });
     } catch (error) {
-      console.error('Failed to disconnect wallet:', error);
+      console.error('Failed to disconnect Phantom wallet:', error);
       toast({
         variant: "destructive",
         title: "Disconnection failed",
-        description: "Failed to disconnect your wallet. Please try again.",
+        description: "Failed to disconnect your Phantom wallet. Please try again.",
       });
     }
   };
 
-  const signMessage = async (message: string) => {
-    if (!wallet || !connected) {
-      throw new Error('Wallet not connected');
+  const disconnectMetaMaskWallet = async () => {
+    setMetamaskConnected(false);
+    setMetamaskPublicKey(null);
+    toast({
+      title: "MetaMask Disconnected",
+      description: "Successfully disconnected MetaMask"
+    });
+  };
+
+  const signWithPhantom = async (message: string) => {
+    if (!phantomWallet || !phantomConnected) {
+      throw new Error('Phantom wallet not connected');
     }
 
     try {
       const encodedMessage = new TextEncoder().encode(message);
-      const signedMessage = await wallet.signMessage(encodedMessage);
+      const signedMessage = await phantomWallet.signMessage(encodedMessage);
       
       const signature = Array.from(signedMessage.signature)
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
       
       toast({
-        title: "Message signed",
+        title: "Message signed with Phantom",
         description: "Your message has been successfully signed.",
       });
       
       return signature;
     } catch (error) {
-      console.error('Failed to sign message:', error);
+      console.error('Failed to sign message with Phantom:', error);
       toast({
         variant: "destructive",
         title: "Signing failed",
-        description: "Failed to sign the message. Please try again.",
+        description: "Failed to sign the message with Phantom. Please try again.",
       });
+      throw error;
+    }
+  };
+
+  const signWithMetaMask = async (message: string): Promise<string> => {
+    if (!metamaskConnected || !metamaskPublicKey) {
+      throw new Error('MetaMask not connected');
+    }
+
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const signature = await signer.signMessage(message);
+      return signature;
+    } catch (error) {
+      console.error('Error signing with MetaMask:', error);
       throw error;
     }
   };
 
   const contextValue = useMemo(
     () => ({
-      wallet,
-      connected,
-      publicKey,
-      connecting,
-      connectWallet,
-      disconnectWallet,
-      signMessage,
+      phantomWallet,
+      phantomConnected,
+      phantomPublicKey,
+      phantomConnecting,
+      connectPhantomWallet,
+      disconnectPhantomWallet,
+      signWithPhantom,
+      metamaskConnected,
+      metamaskPublicKey,
+      metamaskConnecting,
+      connectMetaMaskWallet,
+      disconnectMetaMaskWallet,
+      signWithMetaMask,
     }),
-    [wallet, connected, publicKey, connecting]
+    [
+      phantomWallet,
+      phantomConnected,
+      phantomPublicKey,
+      phantomConnecting,
+      metamaskConnected,
+      metamaskPublicKey,
+      metamaskConnecting,
+    ]
   );
 
   return (

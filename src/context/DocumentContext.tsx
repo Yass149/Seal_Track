@@ -5,6 +5,17 @@ import { type ToastProps } from '@/components/ui/toast';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { BlockchainService } from '../lib/blockchain';
+
+interface Signer {
+  id: string;
+  name: string;
+  email: string;
+  has_signed: boolean;
+  signature_timestamp?: string;
+  signature_data_url?: string;
+  signature_hash?: string;
+}
 
 export interface Document {
   id: string;
@@ -13,19 +24,12 @@ export interface Document {
   content: string;
   created_at: string;
   created_by: string;
-  status: 'draft' | 'pending' | 'completed';
-  signers: Array<{
-    id: string;
-    name: string;
-    email: string;
-    has_signed: boolean;
-    signature_timestamp?: string;
-    signature_hash?: string;
-    signature_data_url?: string;
-  }>;
-  category: string;
+  status: 'draft' | 'pending' | 'completed' | 'rejected';
+  signers: Signer[];
+  category?: string;
   template_id?: string;
   blockchain_hash?: string;
+  document_hash?: string;
   is_authentic?: boolean;
   last_verified_at?: string;
 }
@@ -42,7 +46,7 @@ export interface Contact {
   addedAt: Date;
 }
 
-interface DocumentContextType {
+export interface DocumentContextType {
   documents: Document[];
   templates: Template[];
   contacts: Contact[];
@@ -61,6 +65,9 @@ interface DocumentContextType {
   deleteContact: (id: string) => void;
   getContact: (id: string) => Contact | undefined;
   sendInvitation: (email: string, message: string) => void;
+  connectBlockchainWallet: () => Promise<void>;
+  verifyDocumentOnChain: (documentId: string) => Promise<boolean>;
+  isBlockchainConnected: boolean;
 }
 
 export const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
@@ -231,11 +238,25 @@ const initialDocuments: Document[] = [
   },
 ];
 
+type PostgresDocumentPayload = RealtimePostgresChangesPayload<{
+  id: string;
+  title: string;
+  status: string;
+  created_by: string;
+  signers: Array<{
+    email: string;
+    name: string;
+    has_signed: boolean;
+  }>;
+}>;
+
 export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const { user } = useAuth();
+  const [blockchainService] = useState(() => new BlockchainService());
+  const [isBlockchainConnected, setIsBlockchainConnected] = useState(false);
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -262,55 +283,61 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const fetchDocuments = async () => {
-      if (!user) {
-        console.log('No user logged in, skipping document fetch');
-        setDocuments([]);
-        return;
-      }
+    if (!user) {
+      setDocuments([]);
+      return;
+    }
 
+    const fetchData = async () => {
       try {
-        console.log('Fetching documents for user:', user.id);
+        console.log('Fetching documents for user:', user.id, 'email:', user.email);
         
-        // Get all documents where user is either creator or signer
-        const { data: userDocs, error } = await supabase
+        // First, get documents where user is the creator
+        const { data: creatorDocs, error: creatorError } = await supabase
           .from('documents')
           .select('*')
-          .or(`created_by.eq.${user.id},signers.cs.[{"email":"${user.email}"}]`);
+          .eq('created_by', user.id);
 
-        if (error) {
-          console.error('Error fetching documents:', error);
-          throw error;
+        if (creatorError) {
+          console.error('Error fetching creator documents:', creatorError);
+          throw creatorError;
         }
 
-        if (!userDocs) {
-          console.log('No documents found for user');
-          setDocuments([]);
-          return;
+        // Then, get documents where user is a signer
+        const { data: signerDocs, error: signerError } = await supabase
+          .from('documents')
+          .select('*')
+          .contains('signers', JSON.stringify([{ email: user.email }]));
+
+        if (signerError) {
+          console.error('Error fetching signer documents:', signerError);
+          throw signerError;
         }
 
+        // Combine and deduplicate documents
+        const allDocs = [...(creatorDocs || []), ...(signerDocs || [])];
+        const uniqueDocs = Array.from(new Map(allDocs.map(doc => [doc.id, doc])).values());
+        
         // Sort by creation date
-        const sortedDocs = userDocs.sort((a, b) => 
+        const sortedDocs = uniqueDocs.sort((a, b) => 
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
 
         console.log('Fetched documents:', sortedDocs);
         setDocuments(sortedDocs);
       } catch (error) {
-        console.error('Error in fetchDocuments:', error);
+        console.error('Error in fetchData:', error);
         toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch documents"
-        } as ToastProps);
+          title: 'Error',
+          description: 'Failed to fetch documents.',
+          variant: 'destructive'
+        });
       }
     };
 
-    fetchDocuments();
-
-    // Set up real-time subscription for document updates
+    // Set up real-time subscription
     const subscription = supabase
-      .channel('documents')
+      .channel('document-changes')
       .on(
         'postgres_changes',
         {
@@ -318,102 +345,106 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
           schema: 'public',
           table: 'documents'
         },
-        async (payload: RealtimePostgresChangesPayload<Document>) => {
-          console.log('Received document update:', payload);
-          
-          if (!payload.new || typeof payload.new !== 'object' || !('id' in payload.new)) {
-            console.error('Invalid payload format');
-            return;
-          }
-
-          // Always fetch the latest document state from the database
-          const { data: latestDoc, error } = await supabase
-            .from('documents')
-            .select('*')
-            .eq('id', payload.new.id)
-            .single();
-
-          if (error) {
-            console.error('Error fetching updated document:', error);
-            return;
-          }
-
-          if (!latestDoc) {
-            console.error('No document found after update');
-            return;
-          }
-
-          // Check if the user is either the creator or a signer
-          const isCreator = latestDoc.created_by === user?.id;
-          const isSigner = latestDoc.signers.some(s => s.email === user?.email);
-
-          if (!isCreator && !isSigner) {
-            return; // Skip if user is not involved with this document
-          }
-
-          // Handle different types of updates
-          switch (payload.eventType) {
-            case 'INSERT':
-              setDocuments(prev => [...prev, latestDoc]);
-              toast({
-                title: "Success",
-                description: "New document added",
-                variant: "default"
-              } as ToastProps);
-              break;
-            
-            case 'UPDATE':
-              setDocuments(prev => 
-                prev.map(doc => 
-                  doc.id === latestDoc.id 
-                    ? latestDoc
-                    : doc
-                )
-              );
-              toast({
-                title: "Success",
-                description: "Document has been completed",
-                variant: "default"
-              } as ToastProps);
-              break;
-            
-            case 'DELETE':
-              setDocuments(prev => 
-                prev.filter(doc => doc.id !== payload.old.id)
-              );
-              toast({
-                title: "Info",
-                description: "Document has been deleted",
-                variant: "default"
-              } as ToastProps);
-              break;
-          }
-
-          // Show appropriate notifications
-          if (payload.eventType === 'UPDATE') {
-            if (latestDoc.status === 'completed') {
-              toast({
-                title: "Document Completed",
-                description: "All signers have signed the document.",
-              });
-            } else if (latestDoc.status === 'pending') {
-              const signedCount = latestDoc.signers.filter(s => s.has_signed).length;
-              const totalSigners = latestDoc.signers.length;
-              toast({
-                title: "Document Updated",
-                description: `${signedCount} of ${totalSigners} signers have signed.`,
-              });
-            }
-          }
-        }
+        handleDocumentUpdate
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+
+    // Initial fetch
+    fetchData();
 
     // Cleanup subscription on unmount
     return () => {
+      console.log('Cleaning up subscription');
       subscription.unsubscribe();
     };
   }, [user]);
+
+  const handleDocumentUpdate = async (payload: PostgresDocumentPayload) => {
+    console.log('Received document update:', payload);
+
+    // Type guard to ensure payload.new exists and has required properties
+    if (!payload.new || !('id' in payload.new) || !user) return;
+
+    try {
+      // Fetch the latest document state to ensure we have the most up-to-date data
+      const { data: updatedDoc, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', payload.new.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching updated document:', error);
+        return;
+      }
+
+      if (!updatedDoc) {
+        console.log('No document found with id:', payload.new.id);
+        return;
+      }
+
+      // Check if user is authorized to receive this update
+      const isCreator = updatedDoc.created_by === user.id;
+      const isSigner = updatedDoc.signers?.some(signer => signer.email === user.email);
+
+      if (!isCreator && !isSigner) {
+        console.log('User not authorized for this document update');
+        return;
+      }
+
+      // Update local state based on the event type
+      setDocuments(prevDocs => {
+        const updatedDocs = [...prevDocs];
+
+        switch (payload.eventType) {
+          case 'INSERT': {
+            toast({
+              title: 'New Document',
+              description: `Document "${updatedDoc.title}" has been added`,
+            });
+            return [updatedDoc, ...updatedDocs];
+          }
+
+          case 'UPDATE': {
+            const oldDoc = updatedDocs.find(doc => doc.id === updatedDoc.id);
+            if (oldDoc?.status !== updatedDoc.status) {
+              toast({
+                title: 'Document Updated',
+                description: `Status changed to ${updatedDoc.status}`,
+              });
+            }
+            return updatedDocs.map(doc => 
+              doc.id === updatedDoc.id ? updatedDoc : doc
+            );
+          }
+
+          case 'DELETE': {
+            // Type guard for payload.old
+            if (payload.old && 'id' in payload.old) {
+              toast({
+                title: 'Document Removed',
+                description: 'Document has been removed',
+              });
+              return updatedDocs.filter(doc => doc.id !== payload.old?.id);
+            }
+            return updatedDocs;
+          }
+
+          default:
+            return updatedDocs;
+        }
+      });
+    } catch (error) {
+      console.error('Error handling document update:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process document update',
+        variant: 'destructive'
+      });
+    }
+  };
 
   const sendEmailNotification = async (signerEmail: string, signerName: string, documentTitle: string, documentId: string) => {
     try {
@@ -727,6 +758,24 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return documents.find(doc => doc.id === id);
   };
 
+  const connectBlockchainWallet = async () => {
+    try {
+      await blockchainService.connectWallet();
+      setIsBlockchainConnected(true);
+      toast({
+        title: "Wallet Connected",
+        description: "Successfully connected wallet",
+      });
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+      toast({
+        title: "Connection Failed",
+        description: error instanceof Error ? error.message : "Failed to connect wallet",
+        variant: "destructive",
+      });
+    }
+  };
+
   const addSignature = async (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => {
     try {
       console.log('Starting signature process for document:', documentId);
@@ -775,15 +824,16 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
       const allSigned = updatedSigners.every(s => s.has_signed);
       const newStatus = allSigned ? 'completed' : 'pending';
 
-      // Calculate document hash for verification
-      const documentContent = JSON.stringify({
-        content: currentDoc.content,
-        title: currentDoc.title,
-        description: currentDoc.description,
-        created_at: currentDoc.created_at,
-        created_by: currentDoc.created_by,
-        signers: updatedSigners
-      });
+      // Store document hash on blockchain if connected
+      if (isBlockchainConnected) {
+        const success = await blockchainService.storeDocument(
+          documentId,
+          signatureHash
+        );
+        if (!success) {
+          throw new Error('Failed to store document hash on blockchain');
+        }
+      }
 
       // Update document with new signer information and blockchain hash
       const { error: updateError } = await supabase
@@ -839,9 +889,9 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
     } catch (error) {
       console.error('Error adding signature:', error);
       toast({
-        variant: "destructive",
-        title: "Error",
+        title: "Signature Failed",
         description: error instanceof Error ? error.message : "Failed to add signature",
+        variant: "destructive",
       });
       throw error;
     }
@@ -916,6 +966,49 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
         description: error instanceof Error ? error.message : "Failed to verify document",
       });
       throw error;
+    }
+  };
+
+  const verifyDocumentOnChain = async (documentId: string) => {
+    try {
+      const { data: document } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', documentId)
+        .single();
+
+      if (!document) {
+        throw new Error('Document not found');
+      }
+
+      // Get the latest signature
+      const latestSigner = document.signers.find((signer: Signer) => signer.signature_data_url);
+      if (!latestSigner) {
+        throw new Error('No signatures found for this document');
+      }
+
+      const isValid = await blockchainService.verifyDocument(
+        documentId,
+        latestSigner.signature_hash
+      );
+
+      toast({
+        title: isValid ? "Document Verified" : "Verification Failed",
+        description: isValid 
+          ? "Document signature matches blockchain record" 
+          : "Document signature does not match blockchain record",
+        variant: isValid ? "default" : "destructive",
+      });
+
+      return isValid;
+    } catch (error) {
+      console.error('Error verifying document:', error);
+      toast({
+        title: "Verification Failed",
+        description: error instanceof Error ? error.message : "Failed to verify document",
+        variant: "destructive",
+      });
+      return false;
     }
   };
 
@@ -1127,6 +1220,9 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
         deleteContact,
         getContact,
         sendInvitation,
+        connectBlockchainWallet,
+        verifyDocumentOnChain,
+        isBlockchainConnected,
       }}
     >
       {children}

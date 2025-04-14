@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { useDocuments } from '@/context/DocumentContext';
+import { useDocuments, type Document } from '@/context/DocumentContext';
 import { useAuth } from '@/context/AuthContext';
 import { useWallet } from '@/context/WalletContext';
 import { Button } from '@/components/ui/button';
@@ -11,12 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   Calendar, FileText, Users, CheckCircle, XCircle, Clock, ArrowLeft, 
-  Pencil, Shield, AlertCircle, Plus, AlertTriangle 
+  Pencil, Shield, AlertCircle, Plus, AlertTriangle, Edit, Trash2, Loader2 
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import SignatureCanvas from '@/components/SignatureCanvas';
 import { cn } from '@/lib/utils';
+import { ethers } from 'ethers';
 
 const DocumentDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -24,7 +25,14 @@ const DocumentDetail = () => {
   const navigate = useNavigate();
   const { getDocument, verifyDocument, addSignature, updateDocument } = useDocuments();
   const { user } = useAuth();
-  const { connected, connectWallet, signMessage } = useWallet();
+  const { 
+    phantomConnected, 
+    connectPhantomWallet, 
+    signWithPhantom,
+    metamaskConnected,
+    connectMetaMaskWallet,
+    signWithMetaMask
+  } = useWallet();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('content');
   const [signDialogOpen, setSignDialogOpen] = useState(false);
@@ -79,36 +87,23 @@ const DocumentDetail = () => {
   };
 
   const handleVerify = async () => {
-    if (!document.blockchain_hash) {
-      toast({
-        variant: "destructive",
-        title: "Not verified",
-        description: "This document has not been signed and verified on the blockchain yet.",
-      });
-      return;
-    }
-
-    setVerifying(true);
     try {
-      const isVerified = await verifyDocument(document.id);
-      if (isVerified) {
-        toast({
-          title: "Document verified",
-          description: "The document's authenticity has been verified on the blockchain.",
-        });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Verification failed",
-          description: "Could not verify the document's authenticity.",
-        });
-      }
+      setVerifying(true);
+      const isAuthentic = await verifyDocument(document.id);
+      
+      toast({
+        title: isAuthentic ? "Document Verified" : "Verification Failed",
+        description: isAuthentic 
+          ? "The document is authentic and has not been tampered with."
+          : "The document may have been modified since it was signed.",
+        variant: isAuthentic ? "default" : "destructive"
+      });
     } catch (error) {
       console.error('Error verifying document:', error);
       toast({
         variant: "destructive",
-        title: "Verification error",
-        description: "An error occurred while verifying the document.",
+        title: "Verification Failed",
+        description: error instanceof Error ? error.message : "Failed to verify the document",
       });
     } finally {
       setVerifying(false);
@@ -155,15 +150,28 @@ const DocumentDetail = () => {
       return;
     }
 
-    // First, ensure wallet is connected
-    if (!connected) {
+    // First, ensure both wallets are connected
+    if (!phantomConnected) {
       try {
-        await connectWallet();
+        await connectPhantomWallet();
       } catch (error) {
         toast({
           variant: "destructive",
-          title: "Wallet connection required",
+          title: "Phantom Wallet required",
           description: "Please connect your Phantom wallet to sign documents.",
+        });
+        return;
+      }
+    }
+
+    if (!metamaskConnected) {
+      try {
+        await connectMetaMaskWallet();
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "MetaMask required",
+          description: "Please connect your MetaMask wallet to verify the document.",
         });
         return;
       }
@@ -173,49 +181,34 @@ const DocumentDetail = () => {
     setSignDialogOpen(true);
   };
 
-  const handleSaveSignature = async (signatureDataUrl: string) => {
+  const handleSignatureSubmit = async (signatureDataUrl: string) => {
     try {
-      if (!user || !currentUserSigner) return;
-      
-      // Sign message with Phantom wallet
-      let signatureHash = "";
-      try {
-        const messageToSign = JSON.stringify({
-          action: "sign_document",
-          document_id: document.id,
-          signer_id: currentUserSigner.id,
-          timestamp: new Date().toISOString()
-        });
-        
-        signatureHash = await signMessage(messageToSign);
-      } catch (error) {
-        console.error("Wallet signing error:", error);
-        toast({
-          variant: "destructive",
-          title: "Signing error",
-          description: "Error while signing with Phantom wallet. Please try again.",
-        });
-        return;
+      if (!currentUserSigner) {
+        throw new Error('You are not authorized to sign this document');
       }
-      
-      // Add signature to the document with blockchain hash
-      addSignature(document.id, currentUserSigner.id, signatureDataUrl, signatureHash);
-      
-      setSignDialogOpen(false);
-      
+
+      // Sign the document hash with Phantom
+      const documentHash = await calculateDocumentHash(document);
+      const signatureHash = await signWithPhantom(documentHash);
+
+      // Store the document hash on Ethereum
+      await signWithMetaMask(documentHash);
+
+      // Add the signature to the document using the current user's signer ID
+      await addSignature(document.id, currentUserSigner.id, signatureDataUrl, signatureHash);
+
       toast({
-        title: "Document signed successfully",
-        description: "Your signature has been added and verified on the blockchain.",
+        title: "Document Signed",
+        description: "Your signature has been successfully added to the document.",
       });
 
-      // Redirect to documents page after successful signing
-      navigate('/documents');
+      setSignDialogOpen(false);
     } catch (error) {
-      console.error("Error saving signature:", error);
+      console.error('Error signing document:', error);
       toast({
         variant: "destructive",
-        title: "Signature error",
-        description: "An error occurred while saving your signature.",
+        title: "Signing Failed",
+        description: error instanceof Error ? error.message : "Failed to sign the document",
       });
     }
   };
@@ -263,6 +256,27 @@ const DocumentDetail = () => {
 
   const totalSigners = document.signers.length;
   const signedCount = document.signers.filter(signer => signer.has_signed).length;
+
+  const calculateDocumentHash = async (doc: Document): Promise<string> => {
+    const contentToHash = JSON.stringify({
+      id: doc.id,
+      title: doc.title,
+      content: doc.content,
+      created_at: doc.created_at,
+      created_by: doc.created_by,
+      signers: doc.signers.map(signer => ({
+        id: signer.id,
+        name: signer.name,
+        email: signer.email,
+        has_signed: signer.has_signed,
+        signature_timestamp: signer.signature_timestamp,
+        signature_hash: signer.signature_hash
+      }))
+    });
+
+    const hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(contentToHash));
+    return hash;
+  };
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -620,7 +634,7 @@ const DocumentDetail = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <SignatureCanvas onSave={handleSaveSignature} width={400} height={200} />
+            <SignatureCanvas onSave={handleSignatureSubmit} width={400} height={200} />
           </div>
         </DialogContent>
       </Dialog>
