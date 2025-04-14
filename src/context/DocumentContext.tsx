@@ -18,17 +18,17 @@ export interface Document {
   title: string;
   description: string;
   content: string;
-  createdAt: Date;
-  createdBy: string;
+  created_at: string;
+  created_by: string;
   status: 'draft' | 'pending' | 'completed' | 'rejected';
   signers: Signer[];
   signatures: {
     [userId: string]: string;  // Base64 encoded signature image
   };
-  fileUrl?: string;
-  blockchainHash?: string;
-  isAuthentic?: boolean;
-  templateId?: string;
+  file_url?: string;
+  blockchain_hash?: string;
+  is_authentic?: boolean;
+  template_id?: string;
   category: 'contract' | 'nda' | 'agreement' | 'other';
 }
 
@@ -53,13 +53,13 @@ interface DocumentContextType {
   documents: Document[];
   templates: Template[];
   contacts: Contact[];
-  addDocument: (document: Omit<Document, 'id' | 'createdAt' | 'status' | 'createdBy' | 'signatures'>) => string;
-  updateDocument: (id: string, document: Partial<Document>) => void;
-  deleteDocument: (id: string) => void;
+  addDocument: (document: Omit<Document, 'id' | 'created_at' | 'status' | 'created_by' | 'signatures'>) => Promise<string>;
+  updateDocument: (id: string, document: Partial<Document>) => Promise<void>;
+  deleteDocument: (id: string) => Promise<void>;
   getDocument: (id: string) => Document | undefined;
   addSignature: (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => void;
   verifyDocument: (documentId: string) => boolean;
-  addTemplate: (template: Omit<Template, 'id' | 'createdAt'>) => string;
+  addTemplate: (template: Omit<Template, 'id' | 'created_at'>) => string;
   updateTemplate: (id: string, template: Partial<Template>) => void;
   deleteTemplate: (id: string) => void;
   getTemplate: (id: string) => Template | undefined;
@@ -70,7 +70,7 @@ interface DocumentContextType {
   sendInvitation: (email: string, message: string) => void;
 }
 
-const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
+export const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
 
 export const useDocuments = () => {
   const context = useContext(DocumentContext);
@@ -189,8 +189,8 @@ const initialDocuments: Document[] = [
     title: 'Service Agreement with Alice',
     description: 'Service agreement for project collaboration',
     content: 'This is a service agreement between our company and Alice Johnson...',
-    createdAt: new Date('2023-04-05'),
-    createdBy: '1', // John Doe's ID
+    created_at: new Date('2023-04-05').toISOString(),
+    created_by: '1', // John Doe's ID
     status: 'pending',
     signers: [
       {
@@ -212,15 +212,15 @@ const initialDocuments: Document[] = [
       '1': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
     },
     category: 'contract',
-    blockchainHash: '0x8a2d38f0eaa7b1f9d1e16f4f6cafe022a604f9e217a7e4a433df1939f59',
+    blockchain_hash: '0x8a2d38f0eaa7b1f9d1e16f4f6cafe022a604f9e217a7e4a433df1939f59',
   },
   {
     id: '2',
     title: 'NDA with Bob',
     description: 'Non-disclosure agreement for new project',
     content: 'This Non-Disclosure Agreement is made between our company and Bob Williams...',
-    createdAt: new Date('2023-04-10'),
-    createdBy: '1', // John Doe's ID
+    created_at: new Date('2023-04-10').toISOString(),
+    created_by: '1', // John Doe's ID
     status: 'draft',
     signers: [
       {
@@ -238,7 +238,7 @@ const initialDocuments: Document[] = [
     ],
     signatures: {},
     category: 'nda',
-    templateId: '1', // Based on the NDA template
+    template_id: '1', // Based on the NDA template
   },
 ];
 
@@ -249,53 +249,150 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const { toast } = useToast();
   const { user } = useAuth();
 
+  const fetchDocuments = async () => {
+    if (!user) {
+      console.log('No user logged in, skipping document fetch');
+      return;
+    }
+
+    try {
+      console.log('Fetching documents for user:', user.id);
+      
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching documents:', error);
+        toast({
+          variant: "destructive",
+          title: "Error loading documents",
+          description: error.message,
+        });
+        throw error;
+      }
+
+      console.log('Documents fetched successfully:', data);
+      setDocuments(data || []);
+    } catch (error) {
+      console.error('Error in fetchDocuments:', error);
+      toast({
+        variant: "destructive",
+        title: "Error loading documents",
+        description: "Failed to load your documents. Please try again.",
+      });
+    }
+  };
+
+  // Load documents from Supabase
   useEffect(() => {
-    // Load from localStorage or use mock data on first load
-    const savedDocuments = localStorage.getItem('documents');
-    const savedTemplates = localStorage.getItem('templates');
-    const savedContacts = localStorage.getItem('contacts');
+    fetchDocuments();
+  }, [user]);
 
-    setDocuments(savedDocuments ? JSON.parse(savedDocuments) : initialDocuments);
-    setTemplates(savedTemplates ? JSON.parse(savedTemplates) : initialTemplates);
-    setContacts(savedContacts ? JSON.parse(savedContacts) : initialContacts);
-  }, []);
+  const addDocument = async (document: Omit<Document, 'id' | 'created_at' | 'status' | 'created_by' | 'signatures'>) => {
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "Authentication required",
+        description: "You must be logged in to create documents.",
+      });
+      throw new Error("User not authenticated");
+    }
 
-  // Save to localStorage whenever state changes
-  useEffect(() => {
-    localStorage.setItem('documents', JSON.stringify(documents));
-  }, [documents]);
+    try {
+      console.log('Creating new document:', document);
+      
+      // Format signers if they exist
+      const formattedSigners = document.signers?.map(signer => ({
+        id: signer.id || uuidv4(),
+        name: signer.name,
+        email: signer.email,
+        hasSigned: false
+      })) || [];
 
-  useEffect(() => {
-    localStorage.setItem('templates', JSON.stringify(templates));
-  }, [templates]);
+      const newDocument = {
+        title: document.title,
+        description: document.description || '',
+        content: document.content,
+        created_by: user.id,
+        status: 'draft',
+        signers: formattedSigners,
+        signatures: {},
+        category: document.category
+      };
 
-  useEffect(() => {
-    localStorage.setItem('contacts', JSON.stringify(contacts));
-  }, [contacts]);
+      console.log('Inserting document into Supabase:', newDocument);
 
-  const addDocument = (document: Omit<Document, 'id' | 'createdAt' | 'status' | 'createdBy' | 'signatures'>) => {
-    const id = uuidv4();
-    const newDocument: Document = {
-      ...document,
-      id,
-      createdAt: new Date(),
-      status: 'draft',
-      createdBy: user?.id || 'unknown',
-      signatures: {},
-    };
+      const { data, error } = await supabase
+        .from('documents')
+        .insert(newDocument)
+        .select()
+        .single();
 
-    setDocuments(prev => [...prev, newDocument]);
-    
-    toast({
-      title: "Document created",
-      description: `"${document.title}" has been created successfully.`,
-    });
-    
-    return id;
+      if (error) {
+        console.error('Supabase error creating document:', error);
+        toast({
+          variant: "destructive",
+          title: "Error creating document",
+          description: `Failed to create document: ${error.message}`,
+        });
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('No data returned from document creation');
+      }
+
+      console.log('Document created successfully:', data);
+
+      setDocuments(prev => [...prev, data as Document]);
+      
+      toast({
+        title: "Document created",
+        description: `"${document.title}" has been created successfully.`,
+      });
+      
+      return data.id;
+    } catch (error) {
+      console.error('Error creating document:', error);
+      toast({
+        variant: "destructive",
+        title: "Error creating document",
+        description: error.message,
+      });
+      throw error;
+    }
   };
 
   const updateDocument = async (id: string, document: Partial<Document>) => {
     try {
+      // If updating signers, ensure the data is properly formatted
+      if (document.signers) {
+        // Format signers as a JSONB array
+        const formattedSigners = document.signers.map(signer => ({
+          id: signer.id,
+          name: signer.name,
+          email: signer.email,
+          hasSigned: signer.hasSigned || false,
+          signatureTimestamp: signer.signatureTimestamp || null,
+          signatureHash: signer.signatureHash || null
+        }));
+        document.signers = formattedSigners;
+      }
+
+      console.log('Updating document:', { id, document });
+
+      const { error } = await supabase
+        .from('documents')
+        .update(document)
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating document:', error);
+        throw error;
+      }
+
       setDocuments(prev => {
         const updatedDocs = prev.map(doc => {
           if (doc.id === id) {
@@ -312,38 +409,80 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               // Send email to new signers
               newSigners.forEach(async (signer) => {
                 try {
-                  console.log('Sending email to:', signer.email);
+                  console.log('Preparing to send email to:', signer.email);
+                  
+                  const documentUrl = `${window.location.origin}/documents/${id}`;
+                  console.log('Document URL:', documentUrl);
+                  
+                  const { data: { session } } = await supabase.auth.getSession();
+                  if (!session?.access_token) {
+                    throw new Error('No active session');
+                  }
+
                   const requestBody = {
                     recipientEmail: signer.email,
                     recipientName: signer.name,
                     documentId: id,
                     documentTitle: updatedDoc.title,
-                    documentUrl: `${window.location.origin}/documents/${id}`,
-                    requesterName: user?.user_metadata?.name || 'A user'
+                    documentUrl: documentUrl,
+                    requesterName: user?.user_metadata?.name || user?.email || 'A user'
                   };
-                  console.log('Request body:', requestBody);
+                  
+                  console.log('Sending email with request body:', requestBody);
 
-                  const { data, error } = await supabase.functions.invoke('send-signature-request', {
-                    body: requestBody
+                  // Get the current origin
+                  const functionUrl = process.env.NODE_ENV === 'development' 
+                    ? 'http://localhost:54321/functions/v1/send-signature-request'
+                    : 'https://bxgludnrxdubafwnalxa.supabase.co/functions/v1/send-signature-request';
+
+                  console.log('Using function URL:', functionUrl);
+
+                  const response = await fetch(functionUrl, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify(requestBody)
                   });
 
-                  if (error) {
-                    console.error('Supabase function error:', error);
-                    throw error;
-                  }
+                  let responseText;
+                  try {
+                    responseText = await response.text();
+                    console.log('Raw response:', responseText);
+                    
+                    const responseData = JSON.parse(responseText);
+                    
+                    if (!response.ok) {
+                      console.error('Email sending failed:', { 
+                        status: response.status, 
+                        data: responseData,
+                        headers: Object.fromEntries(response.headers.entries())
+                      });
+                      throw new Error(responseData.error || `Failed to send email: ${response.statusText}`);
+                    }
 
-                  console.log('Email function response:', data);
+                    console.log('Email sent successfully:', responseData);
+                    
+                    toast({
+                      title: "Notification sent",
+                      description: `Signature request sent to ${signer.email}`,
+                    });
+                  } catch (parseError) {
+                    console.error('Error parsing response:', {
+                      responseText,
+                      parseError,
+                      status: response.status,
+                      headers: Object.fromEntries(response.headers.entries())
+                    });
+                    throw new Error(`Failed to parse response: ${responseText}`);
+                  }
                 } catch (error) {
                   console.error('Failed to send email notification:', error);
-                  console.error('Error details:', {
-                    message: error.message,
-                    stack: error.stack,
-                    error
-                  });
                   toast({
                     variant: "destructive",
                     title: "Notification error",
-                    description: `Could not send email to ${signer.email}. Error: ${error.message}`,
+                    description: `Could not send email to ${signer.email}. Please ensure the email service is properly configured.`,
                   });
                 }
               });
@@ -368,16 +507,53 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         title: "Update failed",
         description: `Failed to update document: ${error.message}`,
       });
+      throw error;
     }
   };
 
-  const deleteDocument = (id: string) => {
-    setDocuments(prev => prev.filter(doc => doc.id !== id));
-    
-    toast({
-      title: "Document deleted",
-      description: "The document has been removed.",
-    });
+  const deleteDocument = async (id: string) => {
+    if (!user) {
+      console.log('No user logged in, cannot delete document');
+      toast({
+        variant: "destructive",
+        title: "Authentication required",
+        description: "Please log in to delete documents.",
+      });
+      return;
+    }
+
+    try {
+      console.log('Deleting document:', id);
+      
+      const { error } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting document:', error);
+        toast({
+          variant: "destructive",
+          title: "Error deleting document",
+          description: error.message,
+        });
+        throw error;
+      }
+
+      console.log('Document deleted successfully');
+      setDocuments(prev => prev.filter(doc => doc.id !== id));
+      toast({
+        title: "Document deleted",
+        description: "The document has been successfully deleted.",
+      });
+    } catch (error) {
+      console.error('Error in deleteDocument:', error);
+      toast({
+        variant: "destructive",
+        title: "Error deleting document",
+        description: "Failed to delete the document. Please try again.",
+      });
+    }
   };
 
   const getDocument = (id: string) => {
@@ -408,8 +584,8 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ...doc,
           signers: updatedSigners,
           status: allSigned ? 'completed' : 'pending',
-          blockchainHash: allSigned ? signatureHash : undefined,
-          isAuthentic: allSigned ? true : undefined
+          blockchain_hash: allSigned ? signatureHash : undefined,
+          is_authentic: allSigned ? true : undefined
         };
       }
       return doc;
@@ -426,7 +602,7 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     
     // In a real app, this would verify with the blockchain
     // For now, we'll just check if it has a blockchain hash
-    const isVerified = !!document?.blockchainHash;
+    const isVerified = !!document?.blockchain_hash;
     
     toast({
       title: isVerified ? "Document verified" : "Verification failed",
@@ -439,7 +615,7 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return isVerified;
   };
 
-  const addTemplate = (template: Omit<Template, 'id' | 'createdAt'>) => {
+  const addTemplate = (template: Omit<Template, 'id' | 'created_at'>) => {
     const id = uuidv4();
     const newTemplate: Template = {
       ...template,

@@ -6,24 +6,100 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type Database = {
+export interface Database {
   public: {
     Tables: {
-      [_ in never]: never
-    }
+      documents: {
+        Row: {
+          id: string;
+          title: string;
+          description: string;
+          content: string;
+          createdAt: string;
+          createdBy: string;
+          status: 'draft' | 'pending' | 'completed' | 'rejected';
+          signers: {
+            id: string;
+            name: string;
+            email: string;
+            hasSigned: boolean;
+            signatureTimestamp?: string;
+            signatureHash?: string;
+          }[];
+          signatures: {
+            [key: string]: string;
+          };
+          fileUrl?: string;
+          blockchainHash?: string;
+          isAuthentic?: boolean;
+          templateId?: string;
+          category: 'contract' | 'nda' | 'agreement' | 'other';
+        };
+        Insert: {
+          id: string;
+          title: string;
+          description: string;
+          content: string;
+          createdAt?: string;
+          createdBy: string;
+          status?: 'draft' | 'pending' | 'completed' | 'rejected';
+          signers: {
+            id: string;
+            name: string;
+            email: string;
+            hasSigned: boolean;
+            signatureTimestamp?: string;
+            signatureHash?: string;
+          }[];
+          signatures?: {
+            [key: string]: string;
+          };
+          fileUrl?: string;
+          blockchainHash?: string;
+          isAuthentic?: boolean;
+          templateId?: string;
+          category: 'contract' | 'nda' | 'agreement' | 'other';
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string;
+          content?: string;
+          createdAt?: string;
+          createdBy?: string;
+          status?: 'draft' | 'pending' | 'completed' | 'rejected';
+          signers?: {
+            id: string;
+            name: string;
+            email: string;
+            hasSigned: boolean;
+            signatureTimestamp?: string;
+            signatureHash?: string;
+          }[];
+          signatures?: {
+            [key: string]: string;
+          };
+          fileUrl?: string;
+          blockchainHash?: string;
+          isAuthentic?: boolean;
+          templateId?: string;
+          category?: 'contract' | 'nda' | 'agreement' | 'other';
+        };
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Functions: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Enums: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     CompositeTypes: {
-      [_ in never]: never
-    }
-  }
+      [_ in never]: never;
+    };
+  };
 }
 
 type DefaultSchema = Database[Extract<keyof Database, "public">]
