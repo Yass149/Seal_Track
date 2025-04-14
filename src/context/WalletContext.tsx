@@ -10,8 +10,9 @@ export interface PhantomProvider {
   signMessage: (message: Uint8Array) => Promise<{ signature: Uint8Array }>;
   connect: () => Promise<{ publicKey: PublicKey }>;
   disconnect: () => Promise<void>;
-  on: (event: string, callback: (args: unknown) => void) => void;
-  request: (method: string, params: unknown) => Promise<unknown>;
+  on: (event: string, handler: (args: unknown) => void) => void;
+  removeListener: (event: string, handler: (args: unknown) => void) => void;
+  isPhantom: boolean;
 }
 
 interface WalletContextType {
@@ -37,12 +38,18 @@ export const useWallet = () => {
 // Utility function to detect if Phantom is installed
 const getPhantomProvider = (): PhantomProvider | null => {
   if ('phantom' in window) {
-    const provider = (window as any).phantom?.solana;
+    const provider = (window as { phantom?: { solana?: PhantomProvider } })?.phantom?.solana;
     if (provider?.isPhantom) {
       return provider;
     }
   }
   return null;
+};
+
+// Check if the current domain is allowed by Phantom
+const isAllowedDomain = () => {
+  const currentDomain = window.location.hostname;
+  return currentDomain === 'localhost' || currentDomain === '127.0.0.1';
 };
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -60,12 +67,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Try to connect if user was previously connected
       const checkConnection = async () => {
         try {
-          // Modified: Using provider.connect() without arguments, then checking if we get a response
           const response = await provider.connect();
           setConnected(true);
           setPublicKey(response.publicKey.toString());
         } catch (error) {
-          // User has not authorized the app before or the "connect automatically" setting is off
           setConnected(false);
           setPublicKey(null);
         }
@@ -73,7 +78,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       
       checkConnection();
       
-      // Listen for connection/disconnection events
       provider.on('connect', (publicKey: PublicKey) => {
         setConnected(true);
         setPublicKey(publicKey.toString());
@@ -94,6 +98,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         description: "Please install the Phantom Wallet extension and refresh the page.",
       });
       window.open('https://phantom.app/', '_blank');
+      return;
+    }
+
+    if (!isAllowedDomain()) {
+      toast({
+        variant: "destructive",
+        title: "Domain not allowed",
+        description: "Phantom wallet can only connect to localhost. Please access the app through localhost:8080",
+      });
       return;
     }
 
@@ -147,11 +160,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     try {
-      // Convert string to Uint8Array
       const encodedMessage = new TextEncoder().encode(message);
       const signedMessage = await wallet.signMessage(encodedMessage);
       
-      // Convert signature to hex string without using Buffer
       const signature = Array.from(signedMessage.signature)
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
