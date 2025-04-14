@@ -36,10 +36,18 @@ CREATE POLICY "Enable insert access for authenticated users"
     TO authenticated
     WITH CHECK (true);
 
-CREATE POLICY "Enable update access for document owners"
+CREATE POLICY "Enable update access for document owners and signers"
     ON documents FOR UPDATE
     TO authenticated
-    USING (auth.uid() = created_by);
+    USING (
+        auth.uid() = created_by OR 
+        EXISTS (
+            SELECT 1 
+            FROM jsonb_array_elements(signers) AS s
+            WHERE (s->>'email')::text = auth.jwt() ->> 'email'
+            AND (s->>'has_signed')::boolean = false
+        )
+    );
 
 CREATE POLICY "Enable delete access for document owners"
     ON documents FOR DELETE

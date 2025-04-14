@@ -1,5 +1,5 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { useDocuments } from '@/context/DocumentContext';
 import { useAuth } from '@/context/AuthContext';
 import { useWallet } from '@/context/WalletContext';
@@ -19,6 +19,7 @@ import SignatureCanvas from '@/components/SignatureCanvas';
 
 const DocumentDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { getDocument, verifyDocument, addSignature, updateDocument } = useDocuments();
   const { user } = useAuth();
@@ -33,6 +34,13 @@ const DocumentDetail = () => {
   
   const document = getDocument(id || '');
   
+  // Handle sign action from URL
+  useEffect(() => {
+    if (searchParams.get('action') === 'sign' && document && !signDialogOpen) {
+      handleSign();
+    }
+  }, [searchParams, document]);
+
   if (!document) {
     return (
       <div className="container mx-auto py-8 px-4">
@@ -54,7 +62,7 @@ const DocumentDetail = () => {
   ) : null;
   
   // Check if current user has already signed
-  const userHasSigned = currentUserSigner?.hasSigned || false;
+  const userHasSigned = currentUserSigner?.has_signed || false;
 
   const getStatusBadge = () => {
     switch (document.status) {
@@ -70,24 +78,36 @@ const DocumentDetail = () => {
   };
 
   const handleVerify = async () => {
+    if (!document.blockchain_hash) {
+      toast({
+        variant: "destructive",
+        title: "Not verified",
+        description: "This document has not been signed and verified on the blockchain yet.",
+      });
+      return;
+    }
+
     setVerifying(true);
     try {
-      // In a real app, this would verify the document on the blockchain
-      const isVerified = verifyDocument(document.id);
-      
-      if (!isVerified) {
+      const isVerified = await verifyDocument(document.id);
+      if (isVerified) {
+        toast({
+          title: "Document verified",
+          description: "The document's authenticity has been verified on the blockchain.",
+        });
+      } else {
         toast({
           variant: "destructive",
           title: "Verification failed",
-          description: "Could not verify this document on the blockchain.",
+          description: "Could not verify the document's authenticity.",
         });
       }
     } catch (error) {
-      console.error("Verification error:", error);
+      console.error('Error verifying document:', error);
       toast({
         variant: "destructive",
         title: "Verification error",
-        description: "An error occurred during verification.",
+        description: "An error occurred while verifying the document.",
       });
     } finally {
       setVerifying(false);
@@ -95,11 +115,16 @@ const DocumentDetail = () => {
   };
 
   const handleEdit = () => {
-    // Navigate to edit page (to be implemented later)
-    toast({
-      title: "Edit feature",
-      description: "The edit feature will be implemented soon.",
-    });
+    if (document.status === 'completed') {
+      toast({
+        variant: "destructive",
+        title: "Cannot edit",
+        description: "Completed documents cannot be edited.",
+      });
+      return;
+    }
+    // Navigate to edit page
+    navigate(`/documents/${document.id}/edit`);
   };
 
   const handleSign = async () => {
@@ -218,7 +243,7 @@ const DocumentDetail = () => {
       id: crypto.randomUUID(),
       name: newSignerName,
       email: newSignerEmail,
-      hasSigned: false
+      has_signed: false
     };
 
     updateDocument(document.id, {
@@ -236,7 +261,7 @@ const DocumentDetail = () => {
   };
 
   const totalSigners = document.signers.length;
-  const signedCount = document.signers.filter(signer => signer.hasSigned).length;
+  const signedCount = document.signers.filter(signer => signer.has_signed).length;
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -248,7 +273,7 @@ const DocumentDetail = () => {
           <h1 className="text-3xl font-bold">{document.title}</h1>
           <div className="flex items-center gap-2 mt-2">
             {getStatusBadge()}
-            {document.blockchainHash && (
+            {document.blockchain_hash && (
               <Badge className="flex items-center gap-1 bg-indigo-100 text-indigo-800">
                 <Shield className="w-3 h-3" /> Verified on Blockchain
               </Badge>
@@ -261,7 +286,7 @@ const DocumentDetail = () => {
             variant="outline" 
             onClick={handleVerify} 
             className="gap-2"
-            disabled={verifying || !document.blockchainHash}
+            disabled={verifying || !document.blockchain_hash}
           >
             {verifying ? <span className="animate-spin mr-2">●</span> : <Shield className="h-4 w-4" />}
             Verify
@@ -315,11 +340,11 @@ const DocumentDetail = () => {
                         <div>
                           <p className="font-medium">Document created</p>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(document.createdAt).toLocaleString()}
+                            {new Date(document.created_at).toLocaleString()}
                           </p>
                         </div>
                       </li>
-                      {document.signers.filter(signer => signer.hasSigned).map((signer) => (
+                      {document.signers.filter(signer => signer.has_signed).map((signer) => (
                         <li key={signer.id} className="flex items-start gap-4">
                           <div className="bg-green-100 p-2 rounded-full">
                             <CheckCircle className="h-4 w-4 text-green-600" />
@@ -327,7 +352,7 @@ const DocumentDetail = () => {
                           <div>
                             <p className="font-medium">{signer.name} signed the document</p>
                             <p className="text-sm text-muted-foreground">
-                              {signer.signatureTimestamp ? new Date(signer.signatureTimestamp).toLocaleString() : 'Unknown date'}
+                              {signer.signature_timestamp ? new Date(signer.signature_timestamp).toLocaleString() : 'Unknown date'}
                             </p>
                           </div>
                         </li>
@@ -338,33 +363,48 @@ const DocumentDetail = () => {
                 
                 <TabsContent value="verification" className="mt-0">
                   <div className="p-4 border rounded-md min-h-[400px]">
-                    <p className="text-sm text-muted-foreground mb-4">Document verification information</p>
-                    {document.blockchainHash ? (
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm text-muted-foreground">Blockchain verification status</p>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleVerify}
+                        disabled={verifying || !document.blockchain_hash}
+                        className="gap-2"
+                      >
+                        {verifying ? (
+                          <span className="animate-spin mr-2">●</span>
+                        ) : (
+                          <Shield className="h-4 w-4" />
+                        )}
+                        Verify Now
+                      </Button>
+                    </div>
+                    {document.blockchain_hash ? (
                       <div className="space-y-4">
                         <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                            <p className="font-medium text-green-800">Document verified on blockchain</p>
+                          <div className="flex items-center gap-2 text-green-700">
+                            <Shield className="h-5 w-5" />
+                            <p className="font-medium">Document is verified on the blockchain</p>
                           </div>
-                          <p className="text-sm text-green-700 mt-1">
-                            This document has been verified and hasn't been tampered with.
+                          <p className="mt-2 text-sm text-green-600">
+                            This document has been signed and its integrity is verified on the blockchain.
                           </p>
                         </div>
                         <div>
-                          <p className="font-medium mb-1">Blockchain Hash</p>
-                          <p className="text-sm font-mono bg-gray-100 p-2 rounded overflow-x-auto">
-                            {document.blockchainHash}
+                          <p className="text-sm font-medium mb-1">Blockchain Hash</p>
+                          <p className="text-sm font-mono bg-gray-50 p-2 rounded border break-all">
+                            {document.blockchain_hash}
                           </p>
                         </div>
                       </div>
                     ) : (
                       <div className="p-4 bg-amber-50 border border-amber-200 rounded-md">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-5 w-5 text-amber-600" />
-                          <p className="font-medium text-amber-800">Pending verification</p>
+                        <div className="flex items-center gap-2 text-amber-700">
+                          <AlertCircle className="h-5 w-5" />
+                          <p className="font-medium">Document not yet verified</p>
                         </div>
-                        <p className="text-sm text-amber-700 mt-1">
-                          This document will be verified on the blockchain after all signers have signed.
+                        <p className="mt-2 text-sm text-amber-600">
+                          This document will be verified on the blockchain once all signers have signed.
                         </p>
                       </div>
                     )}
@@ -397,14 +437,14 @@ const DocumentDetail = () => {
                         <div>
                           <p className="font-medium">{signer.name}</p>
                           <p className="text-xs text-muted-foreground">{signer.email}</p>
-                          {signer.signatureTimestamp && (
+                          {signer.signature_timestamp && (
                             <p className="text-xs text-muted-foreground">
-                              Signed on {new Date(signer.signatureTimestamp).toLocaleString()}
+                              Signed on {new Date(signer.signature_timestamp).toLocaleString()}
                             </p>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                          {signer.hasSigned ? (
+                          {signer.has_signed ? (
                             <Badge variant="outline" className="bg-green-100 text-green-800">
                               <CheckCircle className="w-3 h-3 mr-1" />
                               Signed
@@ -449,7 +489,7 @@ const DocumentDetail = () => {
               <ul className="space-y-2">
                 <li className="flex justify-between">
                   <span className="text-muted-foreground">Created</span>
-                  <span>{new Date(document.createdAt).toLocaleDateString()}</span>
+                  <span>{new Date(document.created_at).toLocaleDateString()}</span>
                 </li>
                 <li className="flex justify-between">
                   <span className="text-muted-foreground">Category</span>
@@ -461,7 +501,7 @@ const DocumentDetail = () => {
                 </li>
                 <li className="flex justify-between">
                   <span className="text-muted-foreground">Template</span>
-                  <span>{document.templateId ? 'Yes' : 'No'}</span>
+                  <span>{document.template_id ? 'Yes' : 'No'}</span>
                 </li>
               </ul>
             </CardContent>

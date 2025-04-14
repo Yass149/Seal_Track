@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +40,17 @@ const DocumentItem: React.FC<DocumentItemProps> = ({ document }) => {
   };
   
   const totalSigners = document.signers.length;
-  const signedCount = document.signers.filter(signer => signer.hasSigned).length;
+  const signedCount = document.signers.filter(signer => signer.has_signed).length;
+  
+  const handleView = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/documents/${document.id}`);
+  };
+
+  const handleSign = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/documents/${document.id}?action=sign`);
+  };
   
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -56,7 +65,7 @@ const DocumentItem: React.FC<DocumentItemProps> = ({ document }) => {
           </div>
           <div className="flex items-center">
             {getStatusBadge()}
-            {document.blockchainHash && (
+            {document.blockchain_hash && (
               <Badge className="ml-2 bg-indigo-100 text-indigo-800 hover:bg-indigo-200">
                 <Shield className="w-3 h-3 mr-1" />
                 Verified
@@ -69,7 +78,7 @@ const DocumentItem: React.FC<DocumentItemProps> = ({ document }) => {
         <div className="text-sm text-muted-foreground">
           <div className="flex items-center justify-between">
             <div>
-              <p>Created: {new Date(document.createdAt).toLocaleDateString()}</p>
+              <p>Created: {new Date(document.created_at).toLocaleDateString()}</p>
               <p className="mt-1">Category: {document.category.charAt(0).toUpperCase() + document.category.slice(1)}</p>
             </div>
             <div className="text-right">
@@ -90,18 +99,12 @@ const DocumentItem: React.FC<DocumentItemProps> = ({ document }) => {
       <CardFooter className="justify-end space-x-2">
         <Button 
           variant="outline" 
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/documents/${document.id}`);
-          }}
+          onClick={handleView}
         >
           View
         </Button>
         <Button 
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/documents/${document.id}`);
-          }}
+          onClick={handleSign}
           disabled={document.status === 'completed'}
         >
           {document.status === 'completed' ? 'Signed' : 'Sign'}

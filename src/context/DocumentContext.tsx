@@ -1,44 +1,34 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, type FC, type ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-
-export interface Signer {
-  id: string;
-  name: string;
-  email: string;
-  hasSigned: boolean;
-  signatureTimestamp?: Date;
-  signatureHash?: string;
-}
+import { supabase } from '@/lib/supabaseClient';
+import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface Document {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   content: string;
   created_at: string;
   created_by: string;
-  status: 'draft' | 'pending' | 'completed' | 'rejected';
-  signers: Signer[];
-  signatures: {
-    [userId: string]: string;  // Base64 encoded signature image
-  };
-  file_url?: string;
-  blockchain_hash?: string;
-  is_authentic?: boolean;
+  status: 'draft' | 'pending' | 'completed';
+  signers: Array<{
+    id: string;
+    name: string;
+    email: string;
+    has_signed: boolean;
+    signature_timestamp?: string;
+    signature_hash?: string;
+    signature_data_url?: string;
+  }>;
+  category: string;
   template_id?: string;
-  category: 'contract' | 'nda' | 'agreement' | 'other';
+  blockchain_hash?: string;
 }
 
-export interface Template {
-  id: string;
-  title: string;
-  description: string;
-  content: string;
-  category: 'contract' | 'nda' | 'agreement' | 'other';
-  createdAt: Date;
+export interface Template extends Omit<Document, 'status' | 'created_by' | 'signers' | 'blockchain_hash'> {
+  created_at: string;
 }
 
 export interface Contact {
@@ -53,12 +43,12 @@ interface DocumentContextType {
   documents: Document[];
   templates: Template[];
   contacts: Contact[];
-  addDocument: (document: Omit<Document, 'id' | 'created_at' | 'status' | 'created_by' | 'signatures'>) => Promise<string>;
+  getDocument: (id: string) => Document | undefined;
+  addDocument: (document: Omit<Document, 'id' | 'created_at' | 'status' | 'created_by'>) => Promise<string>;
   updateDocument: (id: string, document: Partial<Document>) => Promise<void>;
   deleteDocument: (id: string) => Promise<void>;
-  getDocument: (id: string) => Document | undefined;
-  addSignature: (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => void;
-  verifyDocument: (documentId: string) => boolean;
+  addSignature: (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => Promise<void>;
+  verifyDocument: (id: string) => Promise<boolean>;
   addTemplate: (template: Omit<Template, 'id' | 'created_at'>) => string;
   updateTemplate: (id: string, template: Partial<Template>) => void;
   deleteTemplate: (id: string) => void;
@@ -122,7 +112,7 @@ _________________________
 [PARTY B NAME]
 Date:`,
     category: 'nda',
-    createdAt: new Date('2023-01-15'),
+    created_at: new Date('2023-01-15').toISOString(),
   },
   {
     id: '2',
@@ -163,7 +153,7 @@ _________________________
 [CONSULTANT NAME]
 Date:`,
     category: 'contract',
-    createdAt: new Date('2023-02-20'),
+    created_at: new Date('2023-02-20').toISOString(),
   },
 ];
 
@@ -197,20 +187,17 @@ const initialDocuments: Document[] = [
         id: '1',
         name: 'John Doe',
         email: 'john@example.com',
-        hasSigned: true,
-        signatureTimestamp: new Date('2023-04-05'),
-        signatureHash: 'abcdef123456',
+        has_signed: true,
+        signature_timestamp: new Date('2023-04-05').toISOString(),
+        signature_hash: 'abcdef123456',
       },
       {
         id: '2',
         name: 'Alice Johnson',
         email: 'alice@example.com',
-        hasSigned: false,
+        has_signed: false,
       },
     ],
-    signatures: {
-      '1': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
-    },
     category: 'contract',
     blockchain_hash: '0x8a2d38f0eaa7b1f9d1e16f4f6cafe022a604f9e217a7e4a433df1939f59',
   },
@@ -227,70 +214,210 @@ const initialDocuments: Document[] = [
         id: '1',
         name: 'John Doe',
         email: 'john@example.com',
-        hasSigned: false,
+        has_signed: false,
       },
       {
         id: '2',
         name: 'Bob Williams',
         email: 'bob@example.com',
-        hasSigned: false,
+        has_signed: false,
       },
     ],
-    signatures: {},
     category: 'nda',
     template_id: '1', // Based on the NDA template
   },
 ];
 
-export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const { toast } = useToast();
   const { user } = useAuth();
 
-  const fetchDocuments = async () => {
-    if (!user) {
-      console.log('No user logged in, skipping document fetch');
-      return;
-    }
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('templates')
+          .select('*');
 
-    try {
-      console.log('Fetching documents for user:', user.id);
-      
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false });
+        if (error) {
+          console.error('Error fetching templates:', error);
+          // Initialize with empty templates if table doesn't exist
+          setTemplates([]);
+          return;
+        }
 
-      if (error) {
-        console.error('Error fetching documents:', error);
-        toast({
-          variant: "destructive",
-          title: "Error loading documents",
-          description: error.message,
-        });
-        throw error;
+        setTemplates(data || []);
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+        setTemplates([]);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
+
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!user) {
+        console.log('No user logged in, skipping document fetch');
+        setDocuments([]);
+        return;
       }
 
-      console.log('Documents fetched successfully:', data);
-      setDocuments(data || []);
-    } catch (error) {
-      console.error('Error in fetchDocuments:', error);
-      toast({
-        variant: "destructive",
-        title: "Error loading documents",
-        description: "Failed to load your documents. Please try again.",
+      try {
+        console.log('Fetching documents for user:', user.id);
+        
+        // Get all documents where user is either creator or signer
+        const { data: userDocs, error } = await supabase
+          .from('documents')
+          .select('*')
+          .or(`created_by.eq.${user.id},signers.cs.[{"email":"${user.email}"}]`);
+
+        if (error) {
+          console.error('Error fetching documents:', error);
+          throw error;
+        }
+
+        if (!userDocs) {
+          console.log('No documents found for user');
+          setDocuments([]);
+          return;
+        }
+
+        // Sort by creation date
+        const sortedDocs = userDocs.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+
+        console.log('Fetched documents:', sortedDocs);
+        setDocuments(sortedDocs);
+      } catch (error) {
+        console.error('Error in fetchDocuments:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "An error occurred while fetching documents.",
+        });
+      }
+    };
+
+    fetchDocuments();
+
+    // Set up real-time subscription for document updates
+    const subscription = supabase
+      .channel('documents')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'documents'
+        },
+        async (payload) => {
+          // Check if the user is either the creator or a signer
+          const updatedDoc = payload.new as Document;
+          const isCreator = updatedDoc.created_by === user?.id;
+          const isSigner = updatedDoc.signers.some(s => s.email === user?.email);
+
+          if (!isCreator && !isSigner) {
+            return; // Skip if user is not involved with this document
+          }
+
+          console.log('Received document update:', payload);
+          
+          // Handle different types of updates
+          switch (payload.eventType) {
+            case 'INSERT':
+              setDocuments(prev => [...prev, updatedDoc]);
+              break;
+            
+            case 'UPDATE':
+              setDocuments(prev => 
+                prev.map(doc => 
+                  doc.id === updatedDoc.id 
+                    ? updatedDoc
+                    : doc
+                )
+              );
+              break;
+            
+            case 'DELETE':
+              setDocuments(prev => 
+                prev.filter(doc => doc.id !== payload.old.id)
+              );
+              break;
+          }
+
+          // Show appropriate notifications
+          if (payload.eventType === 'UPDATE') {
+            if (updatedDoc.status === 'completed') {
+              toast({
+                title: "Document Completed",
+                description: "All signers have signed the document.",
+              });
+            } else if (updatedDoc.status === 'pending') {
+              const signedCount = updatedDoc.signers.filter(s => s.has_signed).length;
+              const totalSigners = updatedDoc.signers.length;
+              toast({
+                title: "Document Updated",
+                description: `${signedCount} of ${totalSigners} signers have signed.`,
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user]);
+
+  const sendEmailNotification = async (signerEmail: string, signerName: string, documentTitle: string, documentId: string) => {
+    try {
+      console.log('Preparing to send email to:', signerEmail);
+      
+      const documentUrl = `${window.location.origin}/documents/${documentId}`;
+      console.log('Document URL:', documentUrl);
+
+      const requestBody = {
+        signerEmail,
+        signerName,
+        documentTitle,
+        documentUrl
+      };
+      console.log('Sending email with request body:', requestBody);
+
+      // Use the deployed Supabase function URL
+      const functionUrl = 'https://bxgludnrxdubafwnalxa.supabase.co/functions/v1/send-signature-request';
+      console.log('Using function URL:', functionUrl);
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(requestBody)
       });
+
+      if (!response.ok) {
+        throw new Error(`Failed to send email: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Email sent successfully:', data);
+    } catch (error) {
+      console.error('Failed to send email notification:', error);
+      // Don't throw the error, just log it
+      // This way the document creation still succeeds even if email fails
     }
   };
 
-  // Load documents from Supabase
-  useEffect(() => {
-    fetchDocuments();
-  }, [user]);
-
-  const addDocument = async (document: Omit<Document, 'id' | 'created_at' | 'status' | 'created_by' | 'signatures'>) => {
+  const addDocument = async (document: Omit<Document, 'id' | 'created_at' | 'status' | 'created_by'>) => {
     if (!user) {
       toast({
         variant: "destructive",
@@ -303,22 +430,13 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       console.log('Creating new document:', document);
       
-      // Format signers if they exist
-      const formattedSigners = document.signers?.map(signer => ({
-        id: signer.id || uuidv4(),
-        name: signer.name,
-        email: signer.email,
-        hasSigned: false
-      })) || [];
-
       const newDocument = {
         title: document.title,
         description: document.description || '',
         content: document.content,
         created_by: user.id,
         status: 'draft',
-        signers: formattedSigners,
-        signatures: {},
+        signers: document.signers || [],
         category: document.category
       };
 
@@ -345,6 +463,18 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       console.log('Document created successfully:', data);
+
+      // Send email notifications to all signers
+      if (document.signers && document.signers.length > 0) {
+        for (const signer of document.signers) {
+          await sendEmailNotification(
+            signer.email,
+            signer.name,
+            document.title,
+            data.id
+          );
+        }
+      }
 
       setDocuments(prev => [...prev, data as Document]);
       
@@ -374,9 +504,9 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           id: signer.id,
           name: signer.name,
           email: signer.email,
-          hasSigned: signer.hasSigned || false,
-          signatureTimestamp: signer.signatureTimestamp || null,
-          signatureHash: signer.signatureHash || null
+          has_signed: signer.has_signed || false,
+          signature_timestamp: signer.signature_timestamp || null,
+          signature_hash: signer.signature_hash || null
         }));
         document.signers = formattedSigners;
       }
@@ -430,10 +560,8 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   
                   console.log('Sending email with request body:', requestBody);
 
-                  // Get the current origin
-                  const functionUrl = process.env.NODE_ENV === 'development' 
-                    ? 'http://localhost:54321/functions/v1/send-signature-request'
-                    : 'https://bxgludnrxdubafwnalxa.supabase.co/functions/v1/send-signature-request';
+                  // Use the deployed Supabase function URL
+                  const functionUrl = 'https://bxgludnrxdubafwnalxa.supabase.co/functions/v1/send-signature-request';
 
                   console.log('Using function URL:', functionUrl);
 
@@ -560,45 +688,120 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return documents.find(doc => doc.id === id);
   };
 
-  const addSignature = (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => {
-    setDocuments(prev => prev.map(doc => {
-      if (doc.id === documentId) {
-        // Find and update the signer
-        const updatedSigners = doc.signers.map(signer => {
-          if (signer.id === signerId) {
-            return {
-              ...signer,
-              hasSigned: true,
-              signatureDataUrl,
-              signatureTimestamp: new Date(),
-            };
-          }
-          return signer;
-        });
+  const addSignature = async (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => {
+    try {
+      console.log('Starting signature process for document:', documentId);
+      
+      // First, fetch the current document state
+      const { data: currentDoc, error: fetchError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', documentId)
+        .single();
 
-        // Check if all signers have signed
-        const allSigned = updatedSigners.every(signer => signer.hasSigned);
-
-        // If all signed, generate blockchain hash and mark as completed
-        return {
-          ...doc,
-          signers: updatedSigners,
-          status: allSigned ? 'completed' : 'pending',
-          blockchain_hash: allSigned ? signatureHash : undefined,
-          is_authentic: allSigned ? true : undefined
-        };
+      if (fetchError) {
+        console.error('Error fetching document:', fetchError);
+        throw new Error(`Document not found: ${fetchError.message}`);
       }
-      return doc;
-    }));
-    
-    toast({
-      title: "Document signed",
-      description: "Your signature has been added and recorded on the blockchain.",
-    });
+
+      if (!currentDoc) {
+        throw new Error('Document not found in database');
+      }
+
+      // Verify the signer exists and hasn't signed yet
+      const signer = currentDoc.signers.find(s => s.id === signerId);
+      if (!signer) {
+        throw new Error('Signer not found in document');
+      }
+
+      if (signer.has_signed) {
+        throw new Error('Signer has already signed this document');
+      }
+
+      // Update the signer's information
+      const updatedSigners = currentDoc.signers.map(s => {
+        if (s.id === signerId) {
+          return {
+            ...s,
+            has_signed: true,
+            signature_timestamp: new Date().toISOString(),
+            signature_hash: signatureHash,
+            signature_data_url: signatureDataUrl
+          };
+        }
+        return s;
+      });
+
+      // Check if all signers have signed
+      const allSigned = updatedSigners.every(s => s.has_signed);
+      const newStatus = allSigned ? 'completed' : 'pending';
+
+      // Update the document in the database
+      const { data: updatedDoc, error: updateError } = await supabase
+        .from('documents')
+        .update({
+          signers: updatedSigners,
+          status: newStatus
+        })
+        .eq('id', documentId)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating document:', updateError);
+        throw new Error(`Failed to update document: ${updateError.message}`);
+      }
+
+      if (!updatedDoc) {
+        throw new Error('No data returned from document update');
+      }
+
+      // Send notification to document creator if all signers have signed
+      if (allSigned && currentDoc.created_by !== user?.id) {
+        const { data: creatorData } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', currentDoc.created_by)
+          .single();
+
+        if (creatorData?.email) {
+          await sendEmailNotification(
+            creatorData.email,
+            'Document Creator',
+            currentDoc.title,
+            documentId
+          );
+        }
+      }
+
+      // Send notifications to other signers
+      const otherSigners = updatedSigners.filter(s => !s.has_signed);
+      for (const signer of otherSigners) {
+        await sendEmailNotification(
+          signer.email,
+          signer.name,
+          currentDoc.title,
+          documentId
+        );
+      }
+
+      toast({
+        title: "Signature added",
+        description: "Your signature has been added to the document.",
+      });
+    } catch (error) {
+      console.error('Error adding signature:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to add signature. Please try again.",
+      });
+      throw error;
+    }
   };
 
-  const verifyDocument = (documentId: string) => {
-    const document = getDocument(documentId);
+  const verifyDocument = async (id: string) => {
+    const document = await getDocument(id);
     
     // In a real app, this would verify with the blockchain
     // For now, we'll just check if it has a blockchain hash
@@ -620,7 +823,7 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const newTemplate: Template = {
       ...template,
       id,
-      createdAt: new Date(),
+      created_at: new Date().toISOString(),
     };
 
     setTemplates(prev => [...prev, newTemplate]);

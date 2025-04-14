@@ -12,7 +12,7 @@ export interface PhantomProvider {
   disconnect: () => Promise<void>;
   on: (event: string, handler: (args: unknown) => void) => void;
   removeListener: (event: string, handler: (args: unknown) => void) => void;
-  isPhantom: boolean;
+  isPhantom?: boolean;
 }
 
 interface WalletContextType {
