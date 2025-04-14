@@ -11,11 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   Calendar, FileText, Users, CheckCircle, XCircle, Clock, ArrowLeft, 
-  Pencil, Shield, AlertCircle, Plus 
+  Pencil, Shield, AlertCircle, Plus, AlertTriangle 
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import SignatureCanvas from '@/components/SignatureCanvas';
+import { cn } from '@/lib/utils';
 
 const DocumentDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -364,11 +365,11 @@ const DocumentDetail = () => {
                 <TabsContent value="verification" className="mt-0">
                   <div className="p-4 border rounded-md min-h-[400px]">
                     <div className="flex items-center justify-between mb-4">
-                      <p className="text-sm text-muted-foreground">Blockchain verification status</p>
+                      <p className="text-sm text-muted-foreground">Document verification status</p>
                       <Button 
                         variant="outline" 
                         onClick={handleVerify}
-                        disabled={verifying || !document.blockchain_hash}
+                        disabled={verifying}
                         className="gap-2"
                       >
                         {verifying ? (
@@ -379,35 +380,94 @@ const DocumentDetail = () => {
                         Verify Now
                       </Button>
                     </div>
-                    {document.blockchain_hash ? (
-                      <div className="space-y-4">
-                        <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-                          <div className="flex items-center gap-2 text-green-700">
-                            <Shield className="h-5 w-5" />
-                            <p className="font-medium">Document is verified on the blockchain</p>
-                          </div>
-                          <p className="mt-2 text-sm text-green-600">
-                            This document has been signed and its integrity is verified on the blockchain.
-                          </p>
+                    
+                    <div className="space-y-4">
+                      {/* Verification Status */}
+                      <div className={cn(
+                        "p-4 border rounded-md",
+                        document.is_authentic 
+                          ? "bg-green-50 border-green-200" 
+                          : document.is_authentic === false
+                            ? "bg-red-50 border-red-200"
+                            : "bg-amber-50 border-amber-200"
+                      )}>
+                        <div className="flex items-center gap-2">
+                          {document.is_authentic ? (
+                            <>
+                              <Shield className="h-5 w-5 text-green-700" />
+                              <p className="font-medium text-green-700">Document is verified and authentic</p>
+                            </>
+                          ) : document.is_authentic === false ? (
+                            <>
+                              <AlertTriangle className="h-5 w-5 text-red-700" />
+                              <p className="font-medium text-red-700">Document verification failed</p>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="h-5 w-5 text-amber-700" />
+                              <p className="font-medium text-amber-700">Document not yet verified</p>
+                            </>
+                          )}
                         </div>
-                        <div>
-                          <p className="text-sm font-medium mb-1">Blockchain Hash</p>
-                          <p className="text-sm font-mono bg-gray-50 p-2 rounded border break-all">
-                            {document.blockchain_hash}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-md">
-                        <div className="flex items-center gap-2 text-amber-700">
-                          <AlertCircle className="h-5 w-5" />
-                          <p className="font-medium">Document not yet verified</p>
-                        </div>
-                        <p className="mt-2 text-sm text-amber-600">
-                          This document will be verified on the blockchain once all signers have signed.
+                        <p className="mt-2 text-sm">
+                          {document.is_authentic
+                            ? `Last verified: ${document.last_verified_at 
+                                ? new Date(document.last_verified_at).toLocaleString()
+                                : 'Unknown'}`
+                            : document.is_authentic === false
+                              ? "The document may have been tampered with or corrupted."
+                              : "Click 'Verify Now' to check document authenticity."}
                         </p>
                       </div>
-                    )}
+
+                      {/* Document Hash */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Document Hash</p>
+                        <div className="p-3 bg-gray-50 rounded-md border">
+                          <p className="text-sm font-mono break-all">
+                            {document.document_hash || 'Not available'}
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          This is a unique fingerprint of your document's content and metadata.
+                        </p>
+                      </div>
+
+                      {/* Signatures */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Signatures</p>
+                        <div className="space-y-2">
+                          {document.signers.map((signer) => (
+                            <div key={signer.id} className="p-3 bg-gray-50 rounded-md border">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-sm font-medium">{signer.name}</p>
+                                {signer.has_signed ? (
+                                  <Badge className="bg-green-100 text-green-800">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Signed
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Pending
+                                  </Badge>
+                                )}
+                              </div>
+                              {signer.has_signed && (
+                                <>
+                                  <p className="text-xs text-muted-foreground mb-1">
+                                    Signed on: {new Date(signer.signature_timestamp!).toLocaleString()}
+                                  </p>
+                                  <p className="text-xs font-mono break-all">
+                                    Hash: {signer.signature_hash}
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
               </CardContent>

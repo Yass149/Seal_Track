@@ -26,6 +26,8 @@ export interface Document {
   category: string;
   template_id?: string;
   blockchain_hash?: string;
+  is_authentic?: boolean;
+  last_verified_at?: string;
 }
 
 export interface Template extends Omit<Document, 'status' | 'created_by' | 'signers' | 'blockchain_hash'> {
@@ -51,9 +53,9 @@ interface DocumentContextType {
   addSignature: (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => Promise<void>;
   verifyDocument: (id: string) => Promise<boolean>;
   addTemplate: (template: Omit<Template, 'id' | 'created_at'>) => string;
-  updateTemplate: (id: string, template: Partial<Template>) => void;
+  updateTemplate: (id: string, template: Partial<Template>) => Promise<void>;
   deleteTemplate: (id: string) => void;
-  getTemplate: (id: string) => Template | undefined;
+  getTemplate: (id: string) => Promise<Template | undefined>;
   addContact: (contact: Omit<Contact, 'id' | 'addedAt'>) => void;
   updateContact: (id: string, contact: Partial<Contact>) => void;
   deleteContact: (id: string) => void;
@@ -773,53 +775,61 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
       const allSigned = updatedSigners.every(s => s.has_signed);
       const newStatus = allSigned ? 'completed' : 'pending';
 
-      // Update the document in the database
-      const { data: updatedDoc, error: updateError } = await supabase
+      // Calculate document hash for verification
+      const documentContent = JSON.stringify({
+        content: currentDoc.content,
+        title: currentDoc.title,
+        description: currentDoc.description,
+        created_at: currentDoc.created_at,
+        created_by: currentDoc.created_by,
+        signers: updatedSigners
+      });
+
+      // Update document with new signer information and blockchain hash
+      const { error: updateError } = await supabase
         .from('documents')
         .update({
           signers: updatedSigners,
-          status: newStatus
+          status: newStatus,
+          blockchain_hash: signatureHash,
+          is_authentic: true,
+          last_verified_at: new Date().toISOString()
         })
-        .eq('id', documentId)
-        .select()
-        .single();
+        .eq('id', documentId);
 
       if (updateError) {
         console.error('Error updating document:', updateError);
-        throw new Error(`Failed to update document: ${updateError.message}`);
+        throw updateError;
       }
 
-      if (!updatedDoc) {
-        throw new Error('No data returned from document update');
+      // Fetch the updated document to ensure we have the latest state
+      const { data: updatedDoc, error: refetchError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', documentId)
+        .single();
+
+      if (refetchError || !updatedDoc) {
+        console.error('Error fetching updated document:', refetchError);
+        throw new Error('Failed to fetch updated document');
       }
 
-      // Send notification to document creator if all signers have signed
-      if (allSigned && currentDoc.created_by !== user?.id) {
-        const { data: creatorData } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', currentDoc.created_by)
-          .single();
+      // Update local state
+      setDocuments(prev => prev.map(doc => 
+        doc.id === documentId ? updatedDoc : doc
+      ));
 
-        if (creatorData?.email) {
+      // If all signers have signed, notify the document creator
+      if (allSigned) {
+        const creatorSigner = updatedDoc.signers.find(s => s.id === updatedDoc.created_by);
+        if (creatorSigner) {
           await sendEmailNotification(
-            creatorData.email,
-            'Document Creator',
-            currentDoc.title,
+            creatorSigner.email,
+            creatorSigner.name,
+            updatedDoc.title,
             documentId
           );
         }
-      }
-
-      // Send notifications to other signers
-      const otherSigners = updatedSigners.filter(s => !s.has_signed);
-      for (const signer of otherSigners) {
-        await sendEmailNotification(
-          signer.email,
-          signer.name,
-          currentDoc.title,
-          documentId
-        );
       }
 
       toast({
@@ -829,30 +839,84 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
     } catch (error) {
       console.error('Error adding signature:', error);
       toast({
+        variant: "destructive",
         title: "Error",
-        description: "Failed to add signature",
-        variant: "destructive"
-      } as ToastProps);
+        description: error instanceof Error ? error.message : "Failed to add signature",
+      });
       throw error;
     }
   };
 
-  const verifyDocument = async (id: string) => {
-    const document = await getDocument(id);
-    
-    // In a real app, this would verify with the blockchain
-    // For now, we'll just check if it has a blockchain hash
-    const isVerified = !!document?.blockchain_hash;
-    
-    toast({
-      title: isVerified ? "Document verified" : "Verification failed",
-      description: isVerified 
-        ? "This document is authentic and has not been tampered with." 
-        : "Could not verify the authenticity of this document.",
-      variant: isVerified ? "default" : "destructive",
-    });
-    
-    return isVerified;
+  const verifyDocument = async (documentId: string) => {
+    try {
+      console.log('Starting document verification:', documentId);
+      
+      // Fetch the current document state
+      const { data: document, error: fetchError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', documentId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching document:', fetchError);
+        throw new Error(`Document not found: ${fetchError.message}`);
+      }
+
+      if (!document) {
+        throw new Error('Document not found in database');
+      }
+
+      // Check if document has been signed
+      if (!document.blockchain_hash) {
+        toast({
+          title: "Verification Failed",
+          description: "Document has not been signed yet and cannot be verified.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Call the verify_document Supabase function
+      const { data: verificationResult, error: verifyError } = await supabase
+        .rpc('verify_document', { doc_id: documentId });
+
+      if (verifyError) {
+        console.error('Error verifying document:', verifyError);
+        throw verifyError;
+      }
+
+      // Update local state with verification result
+      setDocuments(prev => prev.map(doc => {
+        if (doc.id === documentId) {
+          return {
+            ...doc,
+            is_authentic: verificationResult,
+            last_verified_at: new Date().toISOString()
+          };
+        }
+        return doc;
+      }));
+
+      // Show appropriate toast message based on verification result
+      toast({
+        title: verificationResult ? "Document Verified" : "Verification Failed",
+        description: verificationResult 
+          ? "The document is authentic and has not been tampered with."
+          : "The document may have been modified since it was signed.",
+        variant: verificationResult ? "default" : "destructive"
+      });
+
+      return verificationResult;
+    } catch (error) {
+      console.error('Error during document verification:', error);
+      toast({
+        variant: "destructive",
+        title: "Verification Error",
+        description: error instanceof Error ? error.message : "Failed to verify document",
+      });
+      throw error;
+    }
   };
 
   const addTemplate = (template: Omit<Template, 'id' | 'created_at'>) => {
@@ -873,15 +937,67 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return id;
   };
 
-  const updateTemplate = (id: string, template: Partial<Template>) => {
-    setTemplates(prev => prev.map(temp => 
-      temp.id === id ? { ...temp, ...template } : temp
-    ));
-    
-    toast({
-      title: "Template updated",
-      description: "Your changes have been saved.",
-    });
+  const updateTemplate = async (id: string, template: Partial<Template>) => {
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "Authentication required",
+        description: "You must be logged in to edit templates.",
+      });
+      return;
+    }
+
+    try {
+      // First, check if the user has any existing modifications for this template
+      const { data: existingModification } = await supabase
+        .from('user_template_modifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('template_id', id)
+        .single();
+
+      if (existingModification) {
+        // Update existing modification
+        const { error } = await supabase
+          .from('user_template_modifications')
+          .update({
+            ...template,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingModification.id);
+
+        if (error) throw error;
+      } else {
+        // Create new modification
+        const { error } = await supabase
+          .from('user_template_modifications')
+          .insert({
+            user_id: user.id,
+            template_id: id,
+            ...template
+          });
+
+        if (error) throw error;
+      }
+
+      // Update local state with the modified template
+      setTemplates(prev => prev.map(temp => 
+        temp.id === id ? { ...temp, ...template } : temp
+      ));
+      
+      toast({
+        title: "Template updated",
+        description: "Your changes have been saved.",
+      });
+    } catch (error) {
+      console.error('Error updating template:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update template"
+      } as ToastProps);
+      throw error;
+    }
   };
 
   const deleteTemplate = (id: string) => {
@@ -893,8 +1009,41 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
     });
   };
 
-  const getTemplate = (id: string) => {
-    return templates.find(temp => temp.id === id);
+  const getTemplate = async (id: string): Promise<Template | undefined> => {
+    // First get the base template
+    const baseTemplate = templates.find(temp => temp.id === id);
+    if (!baseTemplate || !user) return baseTemplate;
+
+    try {
+      // Check if the user has any modifications for this template
+      const { data: modification, error } = await supabase
+        .from('user_template_modifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('template_id', id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error('Error fetching template modification:', error);
+        throw error;
+      }
+
+      // If there's a modification, merge it with the base template
+      if (modification) {
+        return {
+          ...baseTemplate,
+          title: modification.title || baseTemplate.title,
+          description: modification.description || baseTemplate.description,
+          content: modification.content || baseTemplate.content,
+          category: modification.category || baseTemplate.category
+        };
+      }
+
+      return baseTemplate;
+    } catch (error) {
+      console.error('Error fetching template:', error);
+      return baseTemplate;
+    }
   };
 
   const addContact = (contact: Omit<Contact, 'id' | 'addedAt'>) => {

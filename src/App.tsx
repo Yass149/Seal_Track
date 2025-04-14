@@ -14,6 +14,7 @@ import Documents from "./pages/Documents";
 import CreateDocument from "./pages/CreateDocument";
 import DocumentDetail from "./pages/DocumentDetail";
 import Templates from "./pages/Templates";
+import EditTemplate from "./pages/EditTemplate";
 import Contacts from "./pages/Contacts";
 import Invitations from "./pages/Invitations";
 import NotFound from "./pages/NotFound";
@@ -59,6 +60,7 @@ const AppRoutes = () => {
       <Route path="/documents/create" element={<ProtectedRoute><CreateDocument /></ProtectedRoute>} />
       <Route path="/documents/:id" element={<ProtectedRoute><DocumentDetail /></ProtectedRoute>} />
       <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+      <Route path="/templates/:id" element={<ProtectedRoute><EditTemplate /></ProtectedRoute>} />
       <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
       <Route path="/invitations" element={<ProtectedRoute><Invitations /></ProtectedRoute>} />
       

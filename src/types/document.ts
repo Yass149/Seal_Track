@@ -16,11 +16,21 @@ export interface Document {
   created_at: string;
   created_by: string;
   status: 'draft' | 'pending' | 'completed' | 'rejected';
-  signers: Signer[];
+  signers: Array<{
+    id: string;
+    name: string;
+    email: string;
+    has_signed: boolean;
+    signature_timestamp?: string;
+    signature_hash?: string;
+    signature_data_url?: string;
+  }>;
   signatures?: Record<string, string>;
   file_url?: string;
   blockchain_hash?: string;
+  document_hash?: string;
   is_authentic?: boolean;
+  last_verified_at?: string;
   template_id?: string;
   category?: string;
 }
