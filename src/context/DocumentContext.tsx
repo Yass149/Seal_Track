@@ -315,29 +315,50 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
           schema: 'public',
           table: 'documents'
         },
-        async (payload) => {
+        async (payload: RealtimePostgresChangesPayload<Document>) => {
+          console.log('Received document update:', payload);
+          
+          if (!payload.new || typeof payload.new !== 'object' || !('id' in payload.new)) {
+            console.error('Invalid payload format');
+            return;
+          }
+
+          // Always fetch the latest document state from the database
+          const { data: latestDoc, error } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('id', payload.new.id)
+            .single();
+
+          if (error) {
+            console.error('Error fetching updated document:', error);
+            return;
+          }
+
+          if (!latestDoc) {
+            console.error('No document found after update');
+            return;
+          }
+
           // Check if the user is either the creator or a signer
-          const updatedDoc = payload.new as Document;
-          const isCreator = updatedDoc.created_by === user?.id;
-          const isSigner = updatedDoc.signers.some(s => s.email === user?.email);
+          const isCreator = latestDoc.created_by === user?.id;
+          const isSigner = latestDoc.signers.some(s => s.email === user?.email);
 
           if (!isCreator && !isSigner) {
             return; // Skip if user is not involved with this document
           }
 
-          console.log('Received document update:', payload);
-          
           // Handle different types of updates
           switch (payload.eventType) {
             case 'INSERT':
-              setDocuments(prev => [...prev, updatedDoc]);
+              setDocuments(prev => [...prev, latestDoc]);
               break;
             
             case 'UPDATE':
               setDocuments(prev => 
                 prev.map(doc => 
-                  doc.id === updatedDoc.id 
-                    ? updatedDoc
+                  doc.id === latestDoc.id 
+                    ? latestDoc
                     : doc
                 )
               );
@@ -352,14 +373,14 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
           // Show appropriate notifications
           if (payload.eventType === 'UPDATE') {
-            if (updatedDoc.status === 'completed') {
+            if (latestDoc.status === 'completed') {
               toast({
                 title: "Document Completed",
                 description: "All signers have signed the document.",
               });
-            } else if (updatedDoc.status === 'pending') {
-              const signedCount = updatedDoc.signers.filter(s => s.has_signed).length;
-              const totalSigners = updatedDoc.signers.length;
+            } else if (latestDoc.status === 'pending') {
+              const signedCount = latestDoc.signers.filter(s => s.has_signed).length;
+              const totalSigners = latestDoc.signers.length;
               toast({
                 title: "Document Updated",
                 description: `${signedCount} of ${totalSigners} signers have signed.`,
