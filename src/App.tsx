@@ -3,9 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { UNSAFE_NavigationContext as NavigationContext } from 'react-router-dom';
 import { AuthProvider } from "./context/AuthContext";
 import { DocumentProvider } from "./context/DocumentContext";
 import { WalletProvider } from "./context/WalletContext";
+import { MessagesProvider } from '@/context/MessagesContext';
+import { ContactsProvider } from '@/context/ContactsContext';
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -71,19 +74,30 @@ const AppRoutes = () => {
 
 const queryClient = new QueryClient();
 
+const router = {
+  future: {
+    v7_startTransition: true,
+    v7_relativeSplatPath: true
+  }
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <WalletProvider>
-          <DocumentProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
-          </DocumentProvider>
-        </WalletProvider>
+        <MessagesProvider>
+          <ContactsProvider>
+            <WalletProvider>
+              <DocumentProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter future={router.future}>
+                  <AppRoutes />
+                </BrowserRouter>
+              </DocumentProvider>
+            </WalletProvider>
+          </ContactsProvider>
+        </MessagesProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
