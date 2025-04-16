@@ -2,271 +2,290 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/ui/use-toast';
-import { sendInvitationEmail } from '@/lib/email';
 
 interface Contact {
   id: string;
   user_id: string;
-  contact_id: string;
+  contact_id?: string | null;
   name: string;
   email: string;
-  walletAddress?: string;
+  wallet_address?: string | null;
   created_at: string;
-  last_message_at?: string;
+  last_message_at?: string | null;
+}
+
+interface ContactRequest {
+  id: string;
+  sender_id: string;
+  recipient_email: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  updated_at: string;
+  sender_name: string;
 }
 
 interface ContactsContextType {
   contacts: Contact[];
-  addContact: (email: string) => Promise<void>;
-  inviteContact: (email: string) => Promise<void>;
-  updateContact: (id: string, data: Partial<Contact>) => Promise<void>;
+  sentRequests: ContactRequest[];
+  receivedRequests: ContactRequest[];
+  addContact: (contact: { name: string; email: string; wallet_address?: string }) => Promise<void>;
+  updateContact: (id: string, contact: Partial<Contact>) => Promise<void>;
   deleteContact: (id: string) => Promise<void>;
+  getContact: (id: string) => Contact | undefined;
+  acceptRequest: (requestId: string) => Promise<void>;
+  rejectRequest: (requestId: string) => Promise<void>;
 }
 
 const ContactsContext = createContext<ContactsContextType | undefined>(undefined);
 
 export function ContactsProvider({ children }: { children: React.ReactNode }) {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [sentRequests, setSentRequests] = useState<ContactRequest[]>([]);
+  const [receivedRequests, setReceivedRequests] = useState<ContactRequest[]>([]);
   const { user } = useAuth();
+
+  const fetchData = async () => {
+    if (!user) return;
+
+    // Fetch contacts
+    const { data: contactsData, error: contactsError } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (contactsError) {
+      console.error('Error fetching contacts:', contactsError);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to fetch contacts"
+      });
+      return;
+    }
+
+    // Fetch sent requests
+    const { data: sentData, error: sentError } = await supabase
+      .from('contact_requests')
+      .select('*')
+      .eq('sender_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (sentError) {
+      console.error('Error fetching sent requests:', sentError);
+    }
+
+    // Fetch received requests
+    const { data: receivedData, error: receivedError } = await supabase
+      .from('contact_requests')
+      .select('*')
+      .eq('recipient_email', user.email)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (receivedError) {
+      console.error('Error fetching received requests:', receivedError);
+    }
+
+    // Type assertions to fix TypeScript errors
+    setContacts((contactsData as Contact[]) || []);
+    setSentRequests((sentData as ContactRequest[]) || []);
+    setReceivedRequests((receivedData as ContactRequest[]) || []);
+  };
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchContacts = async () => {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('*')
-        .or(`user_id.eq.${user.id},contact_id.eq.${user.id}`)
-        .order('name');
+    fetchData();
 
-      if (error) {
-        console.error('Error fetching contacts:', error);
-        return;
-      }
-
-      // Transform the data to ensure it matches Contact interface
-      const typedContacts = (data || []).map(contact => ({
-        id: contact.id,
-        user_id: contact.user_id,
-        contact_id: contact.contact_id,
-        name: contact.name,
-        email: contact.email,
-        walletAddress: contact.walletAddress,
-        created_at: contact.created_at,
-        last_message_at: contact.last_message_at
-      })) as Contact[];
-
-      setContacts(typedContacts);
-    };
-
-    fetchContacts();
-
-    // Subscribe to ALL contact changes that involve the current user
-    const subscription = supabase
+    // Subscribe to changes
+    const contactsSubscription = supabase
       .channel('contacts-changes')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'contacts',
-        filter: `or(user_id.eq.${user.id},contact_id.eq.${user.id})` 
-      }, (payload) => {
-        console.log('Contact change received:', payload);
-        if (payload.eventType === 'INSERT') {
-          const newContact = {
-            id: payload.new.id,
-            user_id: payload.new.user_id,
-            contact_id: payload.new.contact_id,
-            name: payload.new.name,
-            email: payload.new.email,
-            walletAddress: payload.new.walletAddress,
-            created_at: payload.new.created_at,
-            last_message_at: payload.new.last_message_at
-          } as Contact;
-          setContacts(prev => [...prev, newContact]);
-        } else if (payload.eventType === 'UPDATE') {
-          setContacts(prev => prev.map(contact => 
-            contact.id === payload.new.id ? { ...contact, ...payload.new as Contact } : contact
-          ));
-        } else if (payload.eventType === 'DELETE') {
-          setContacts(prev => prev.filter(contact => contact.id !== payload.old.id));
-        }
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    const requestsSubscription = supabase
+      .channel('requests-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'contact_requests',
+        filter: `recipient_email=eq.${user.email}`
+      }, () => {
+        fetchData();
       })
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      contactsSubscription.unsubscribe();
+      requestsSubscription.unsubscribe();
     };
   }, [user]);
 
-  const addContact = async (email: string) => {
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to add contacts",
-        variant: "destructive"
-      });
-      return;
+  const createContactRequest = async (recipientEmail: string) => {
+    try {
+      const { data, error } = await supabase
+        .rpc('create_contact_request', { recipient_email: recipientEmail });
+
+      if (error) {
+        console.error('Error creating contact request:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error creating contact request:', error);
+      throw error;
     }
-
-    // Get existing user with proper type casting
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, email, user_metadata')
-      .eq('email', email)
-      .single();
-
-    if (userError || !userData) {
-      toast({
-        title: "Error",
-        description: "User not found. Please invite them to join.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const existingUser = {
-      id: userData.id as string,
-      email: userData.email as string,
-      user_metadata: userData.user_metadata as { full_name?: string }
-    };
-
-    // Check if contact already exists
-    const { data: existingContact } = await supabase
-      .from('contacts')
-      .select('*')
-      .or(`and(user_id.eq.${user.id},contact_id.eq.${existingUser.id}),and(user_id.eq.${existingUser.id},contact_id.eq.${user.id})`)
-      .single();
-
-    if (existingContact) {
-      toast({
-        title: "Error",
-        description: "This contact already exists",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Create bidirectional contact relationship
-    const [{ error: error1 }, { error: error2 }] = await Promise.all([
-      supabase.from('contacts').insert({
-        user_id: user.id,
-        contact_id: existingUser.id,
-        name: existingUser.user_metadata?.full_name || email.split('@')[0],
-        email: existingUser.email
-      }),
-      supabase.from('contacts').insert({
-        user_id: existingUser.id,
-        contact_id: user.id,
-        name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Unknown',
-        email: user.email
-      })
-    ]);
-
-    if (error1 || error2) {
-      console.error('Error adding contact:', { error1, error2 });
-      toast({
-        title: "Error",
-        description: "Failed to add contact",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    toast({
-      title: "Success",
-      description: "Contact added successfully"
-    });
   };
 
-  const inviteContact = async (email: string) => {
+  const addContact = async (contact: { name: string; email: string; wallet_address?: string }) => {
     if (!user) {
       toast({
+        variant: "destructive",
         title: "Error",
-        description: "You must be logged in to invite contacts",
-        variant: "destructive"
+        description: "You must be logged in to add contacts"
       });
       return;
     }
 
     try {
-      // Generate invitation link
-      const invitationLink = `${window.location.origin}/signup?invited_by=${user.id}`;
-      
-      // Send invitation email using the same system as document notifications
-      const { error: emailError } = await supabase
-        .from('email_notifications')
-        .insert({
-          recipient_email: email,
-          subject: `${user.user_metadata?.full_name || user.email?.split('@')[0]} invited you to join DocuChain`,
-          content: `
-            <h1>You've been invited to join DocuChain!</h1>
-            <p>${user.user_metadata?.full_name || user.email?.split('@')[0]} has invited you to join DocuChain, a secure document signing platform.</p>
-            <p>Click the link below to accept the invitation:</p>
-            <a href="${invitationLink}">Accept Invitation</a>
-          `,
-          type: 'invitation',
-          status: 'pending',
-          metadata: {
-            sender_id: user.id,
-            sender_name: user.user_metadata?.full_name || user.email?.split('@')[0],
-            invitation_link: invitationLink
-          }
+      // Call the create_contact_request function
+      const { data, error } = await supabase
+        .rpc('create_contact_request', {
+          recipient_email: contact.email
         });
 
-      if (emailError) {
-        throw new Error('Failed to send invitation email');
-      }
-
-      // Record the invitation in the database
-      const { error: inviteError } = await supabase
-        .from('invitations')
-        .insert({
-          sender_id: user.id,
-          email: email,
-          status: 'pending',
-          created_at: new Date().toISOString()
+      if (error) {
+        console.error('Error creating contact request:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message || "Failed to send contact request"
         });
-
-      if (inviteError) {
-        throw new Error('Failed to record invitation');
+        return;
       }
 
       toast({
-        title: "Success",
-        description: "Invitation sent successfully"
+        title: "Request sent",
+        description: `Contact request sent to ${contact.email}`
       });
+
+      // Refresh the data
+      fetchData();
     } catch (error) {
-      console.error('Error in inviteContact:', error);
+      console.error('Unexpected error adding contact:', error);
       toast({
+        variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to send invitation",
-        variant: "destructive"
+        description: "An unexpected error occurred"
       });
     }
   };
 
-  const updateContact = async (id: string, data: Partial<Contact>) => {
+  const acceptRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('contact_requests')
+        .update({ status: 'accepted' })
+        .eq('id', requestId)
+        .eq('recipient_email', user?.email);
+
+      if (error) {
+        console.error('Error accepting request:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to accept contact request"
+        });
+        return;
+      }
+
+      toast({
+        title: "Request accepted",
+        description: "Contact request accepted successfully"
+      });
+
+      // Refresh the data
+      fetchData();
+    } catch (error) {
+      console.error('Unexpected error accepting request:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred"
+      });
+    }
+  };
+
+  const rejectRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('contact_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId)
+        .eq('recipient_email', user?.email);
+
+      if (error) {
+        console.error('Error rejecting request:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to reject contact request"
+        });
+        return;
+      }
+
+      toast({
+        title: "Request rejected",
+        description: "Contact request rejected successfully"
+      });
+
+      // Refresh the data
+      fetchData();
+    } catch (error) {
+      console.error('Unexpected error rejecting request:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred"
+      });
+    }
+  };
+
+  const updateContact = async (id: string, contact: Partial<Contact>) => {
     if (!user) return;
 
     const { error } = await supabase
       .from('contacts')
-      .update(data)
+      .update(contact)
       .eq('id', id)
       .eq('user_id', user.id);
 
     if (error) {
+      console.error('Error updating contact:', error);
       toast({
+        variant: "destructive",
         title: "Error",
-        description: "Failed to update contact",
-        variant: "destructive"
+        description: "Failed to update contact"
       });
       return;
     }
 
     toast({
-      title: "Success",
-      description: "Contact updated successfully"
+      title: "Contact updated",
+      description: "Contact information has been updated."
     });
+
+    // Refresh the data
+    fetchData();
   };
 
   const deleteContact = async (id: string) => {
@@ -279,27 +298,39 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
       .eq('user_id', user.id);
 
     if (error) {
+      console.error('Error deleting contact:', error);
       toast({
+        variant: "destructive",
         title: "Error",
-        description: "Failed to delete contact",
-        variant: "destructive"
+        description: "Failed to delete contact"
       });
       return;
     }
 
     toast({
-      title: "Success",
-      description: "Contact deleted successfully"
+      title: "Contact removed",
+      description: "The contact has been removed from your list."
     });
+
+    // Refresh the data
+    fetchData();
+  };
+
+  const getContact = (id: string) => {
+    return contacts.find(c => c.id === id);
   };
 
   return (
     <ContactsContext.Provider value={{
       contacts,
+      sentRequests,
+      receivedRequests,
       addContact,
-      inviteContact,
       updateContact,
-      deleteContact
+      deleteContact,
+      getContact,
+      acceptRequest,
+      rejectRequest
     }}>
       {children}
     </ContactsContext.Provider>

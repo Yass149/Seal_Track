@@ -6,6 +6,7 @@ import { useMessages } from '@/context/MessagesContext';
 import { useAuth } from '@/context/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { Send } from 'lucide-react';
+import { useContacts } from '@/context/ContactsContext';
 
 interface ChatProps {
   contactId: string;
@@ -16,8 +17,13 @@ export function Chat({ contactId, contactName }: ChatProps) {
   const [newMessage, setNewMessage] = useState('');
   const { user } = useAuth();
   const { sendMessage, getConversation, markAsRead } = useMessages();
+  const { contacts } = useContacts();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const conversation = getConversation(contactId);
+
+  // Find the contact object
+  const contact = contacts.find(c => c.id === contactId);
+  const receiverId = contact?.contact_id || null;
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -36,9 +42,8 @@ export function Chat({ contactId, contactName }: ChatProps) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
-
-    await sendMessage(contactId, newMessage.trim());
+    if (!newMessage.trim() || !receiverId) return;
+    await sendMessage(receiverId, newMessage.trim());
     setNewMessage('');
   };
 
@@ -77,19 +82,25 @@ export function Chat({ contactId, contactName }: ChatProps) {
         </div>
       </ScrollArea>
 
-      <form onSubmit={handleSendMessage} className="border-t p-4">
-        <div className="flex gap-2">
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="flex-1"
-          />
-          <Button type="submit" size="icon">
-            <Send className="h-4 w-4" />
-          </Button>
+      {receiverId ? (
+        <form onSubmit={handleSendMessage} className="border-t p-4">
+          <div className="flex gap-2">
+            <Input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type a message..."
+              className="flex-1"
+            />
+            <Button type="submit" size="icon">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="border-t p-4 text-center text-sm text-gray-500">
+          This user is not registered yet. You cannot send messages.
         </div>
-      </form>
+      )}
     </div>
   );
 } 

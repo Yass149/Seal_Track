@@ -3,52 +3,103 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { UserPlus, Copy, Mail, Send } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 const Invitations = () => {
-  const [inviteeEmail, setInviteeEmail] = useState('');
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  
-  // For demo purposes, we'll use a mock invite link
-  const inviteLink = 'https://docuchain.app/invite/ABC123XYZ';
-  
+  const { user } = useAuth();
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const invitationLink = user ? `${window.location.origin}/signup?invited_by=${user.email}` : '';
+
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(inviteLink);
+    if (!invitationLink) return;
+    navigator.clipboard.writeText(invitationLink);
     toast({
       title: "Copied to clipboard",
       description: "Invitation link has been copied to your clipboard.",
     });
   };
-  
-  const handleSendInvite = () => {
-    if (!inviteeEmail) {
+
+  const handleSendInvitation = async () => {
+    if (!inviteEmail) {
       toast({
         variant: "destructive",
-        title: "Invalid email",
-        description: "Please enter a valid email address.",
+        title: "Invalid input",
+        description: "Email is required.",
       });
       return;
     }
-    
-    setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      setIsLoading(true);
+      console.log('Sending invitation to:', inviteEmail);
+      
+      const { data, error } = await supabase.functions.invoke('send-invitation', {
+        body: {
+          recipientEmail: inviteEmail,
+          senderName: user.user_metadata?.name || user.email,
+          invitationLink,
+          message: inviteMessage
+        }
+      });
+
+      if (error) {
+        let errorMessage = 'An error occurred while sending the invitation.';
+        try {
+          const errorData = error.message ? JSON.parse(error.message) : data;
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (e) {
+          console.error('Error parsing error response:', e);
+        }
+
+        toast({
+          variant: "destructive",
+          title: "Failed to send invitation",
+          description: errorMessage,
+        });
+        return;
+      }
+
+      if (data?.error === 'User already exists') {
+        toast({
+          variant: "default",
+          className: "bg-yellow-50 border-yellow-200",
+          title: "User already exists",
+          description: "This email address already belongs to a registered user.",
+        });
+        return;
+      }
+
       toast({
         title: "Invitation sent",
-        description: `An invitation has been sent to ${inviteeEmail}.`,
+        description: `An invitation has been sent to ${inviteEmail}.`,
       });
-      setInviteeEmail('');
-      setMessage('');
-    }, 1000);
+      
+      setInviteEmail('');
+      setInviteMessage('');
+    } catch (error) {
+      console.error('Failed to send invitation:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to send invitation",
+        description: error instanceof Error ? error.message : "An error occurred while sending the invitation.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
-  
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <main className="flex-1 container mx-auto px-4 py-8">
@@ -78,8 +129,8 @@ const Invitations = () => {
                   id="email"
                   type="email"
                   placeholder="colleague@example.com"
-                  value={inviteeEmail}
-                  onChange={(e) => setInviteeEmail(e.target.value)}
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -87,15 +138,15 @@ const Invitations = () => {
                 <Textarea
                   id="message"
                   placeholder="Add a personal message to your invitation..."
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  value={inviteMessage}
+                  onChange={(e) => setInviteMessage(e.target.value)}
                   rows={4}
                 />
               </div>
             </CardContent>
             <CardFooter>
               <Button 
-                onClick={handleSendInvite} 
+                onClick={handleSendInvitation} 
                 disabled={isLoading} 
                 className="w-full flex items-center gap-2"
               >
@@ -122,7 +173,7 @@ const Invitations = () => {
                 <div className="flex">
                   <Input
                     id="invite-link"
-                    value={inviteLink}
+                    value={invitationLink}
                     readOnly
                     className="rounded-r-none"
                   />
@@ -168,52 +219,6 @@ const Invitations = () => {
                 Telegram
               </Button>
             </CardFooter>
-          </Card>
-        </div>
-        
-        {/* Bulk Invite Section */}
-        <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Bulk Invitations</CardTitle>
-              <CardDescription>
-                Invite multiple people at once
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button className="w-full">Upload Contact List</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Bulk Invite Contacts</DialogTitle>
-                    <DialogDescription>
-                      Upload a CSV file with email addresses to send multiple invitations at once.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
-                      <UserPlus className="w-10 h-10 text-gray-400 mx-auto mb-4" />
-                      <p className="text-sm text-gray-500 mb-2">Drag and drop a CSV file here, or click to browse</p>
-                      <Button variant="outline" size="sm">Select File</Button>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Accepted format: CSV file with a column named "email". Download our 
-                      <a href="#" className="text-docuchain-primary hover:underline"> template</a>.
-                    </p>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline">
-                      Cancel
-                    </Button>
-                    <Button type="button" disabled>
-                      Upload and Send
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </CardContent>
           </Card>
         </div>
       </main>

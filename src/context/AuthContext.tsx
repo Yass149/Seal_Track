@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { User } from '@supabase/supabase-js';
@@ -45,6 +44,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Upsert user profile on login/signup
+    const upsertProfile = async () => {
+      try {
+        await supabase.from('profiles').upsert({
+          id: user.id,
+          email: user.email
+        });
+      } catch (err) {
+        console.error('Failed to upsert user profile:', err);
+      }
+    };
+
+    upsertProfile();
+  }, [user]);
 
   const login = async (email: string, password: string) => {
     try {
