@@ -11,13 +11,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   Calendar, FileText, Users, CheckCircle, XCircle, Clock, ArrowLeft, 
-  Pencil, Shield, AlertCircle, Plus, AlertTriangle, Edit, Trash2, Loader2 
+  Pencil, Shield, AlertCircle, Plus, AlertTriangle, Edit, Trash2, Loader2, Download 
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import SignatureCanvas from '@/components/SignatureCanvas';
 import { cn } from '@/lib/utils';
 import { ethers } from 'ethers';
+import { supabase } from '@/lib/supabase';
 
 const DocumentDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +41,7 @@ const DocumentDetail = () => {
   const [addSignerDialogOpen, setAddSignerDialogOpen] = useState(false);
   const [newSignerName, setNewSignerName] = useState('');
   const [newSignerEmail, setNewSignerEmail] = useState('');
+  const [loading, setLoading] = useState(false);
   
   const document = getDocument(id || '');
   
@@ -278,6 +280,65 @@ const DocumentDetail = () => {
     return hash;
   };
 
+  const handleDownloadPDF = async () => {
+    if (!document || !user) return;
+
+    try {
+      setLoading(true);
+      console.log('Downloading PDF for document:', {
+        id: document.id,
+        title: document.title,
+        signerCount: document.signers.length
+      });
+
+      const { data: response, error } = await supabase.functions.invoke('generate-pdf', {
+        body: { documentId: document.id }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!response?.data) {
+        throw new Error('No PDF data received');
+      }
+
+      // Convert base64 to blob
+      const binaryString = atob(response.data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      
+      // Create download link using window.document
+      const url = URL.createObjectURL(blob);
+      const downloadLink = window.document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.download = response.filename || `${document.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+      window.document.body.appendChild(downloadLink);
+      downloadLink.click();
+      window.document.body.removeChild(downloadLink);
+      
+      // Clean up
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "Document downloaded successfully"
+      });
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to download document"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex flex-col md:flex-row items-start justify-between mb-6">
@@ -321,6 +382,17 @@ const DocumentDetail = () => {
           >
             {document.status === 'completed' || userHasSigned ? 'Signed' : 'Sign Document'}
           </Button>
+          {document && document.signers.every(signer => signer.has_signed) && (
+            <Button
+              variant="outline"
+              onClick={handleDownloadPDF}
+              disabled={loading}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Download PDF
+            </Button>
+          )}
         </div>
       </div>
 

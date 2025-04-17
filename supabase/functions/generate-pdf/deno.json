@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.window"],
+    "strict": true,
+    "types": ["https://deno.land/std@0.168.0/http/server.d.ts"]
+  },
+  "importMap": {
+    "imports": {
+      "https://deno.land/std@0.168.0/http/server.ts": "https://deno.land/std@0.168.0/http/server.ts",
+      "https://esm.sh/@supabase/supabase-js@2.39.3": "https://esm.sh/@supabase/supabase-js@2.39.3",
+      "https://esm.sh/pdf-lib@1.17.1": "https://esm.sh/pdf-lib@1.17.1"
+    }
+  }
+} 
