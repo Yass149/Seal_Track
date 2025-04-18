@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
@@ -7,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
+import { motion } from 'framer-motion';
+import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -41,77 +42,112 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-docuchain-background px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-b from-primary-50 to-white flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="w-full max-w-md z-10"
+      >
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
+          <Link to="/" className="inline-flex items-center gap-2 text-2xl font-bold text-primary-600">
             <svg
-              className="w-12 h-12 text-docuchain-primary"
+              className="w-8 h-8"
               fill="currentColor"
               viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
             >
               <path d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
               <path d="M6.75 5.25h10.5a1.5 1.5 0 0 1 1.5 1.5v10.5a1.5 1.5 0 0 1-1.5 1.5H6.75a1.5 1.5 0 0 1-1.5-1.5V6.75a1.5 1.5 0 0 1 1.5-1.5Z" />
             </svg>
-          </div>
-          <h1 className="text-3xl font-bold text-docuchain-primary">DocuChain</h1>
-          <p className="text-docuchain-text mt-2">Secure document signing with blockchain technology</p>
+            DocuChain
+          </Link>
         </div>
-        
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Sign In</CardTitle>
-            <CardDescription>Enter your credentials to access your account</CardDescription>
+
+        <Card className="border-0 shadow-lg">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+            <CardDescription>
+              Enter your email and password to sign in to your account
+            </CardDescription>
           </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10 bg-gray-50 border-gray-200 focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <Link to="/forgot-password" className="text-sm text-docuchain-primary hover:underline">
+                  <Link 
+                    to="/forgot-password" 
+                    className="text-sm text-primary-600 hover:text-primary-700 hover:underline"
+                  >
                     Forgot password?
                   </Link>
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10 bg-gray-50 border-gray-200 focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50"
+                  />
+                </div>
               </div>
-            </CardContent>
-            <CardFooter className="flex-col space-y-2">
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Signing in...' : 'Sign In'}
+              <Button 
+                type="submit" 
+                className="w-full bg-primary-600 hover:bg-primary-700"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign in
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
               </Button>
-              <p className="text-sm text-center text-gray-500 mt-4">
-                Don't have an account?{' '}
-                <Link to="/signup" className="text-docuchain-primary hover:underline font-medium">
-                  Sign up
-                </Link>
-              </p>
-            </CardFooter>
-          </form>
+            </form>
+          </CardContent>
+          <CardFooter className="flex flex-col space-y-4 border-t bg-gray-50 rounded-b-lg">
+            <div className="text-sm text-gray-600 text-center">
+              Don't have an account?{' '}
+              <Link 
+                to="/signup" 
+                className="text-primary-600 hover:text-primary-700 hover:underline font-medium"
+              >
+                Create one now
+              </Link>
+            </div>
+          </CardFooter>
         </Card>
 
-        <div className="mt-4 text-center text-xs text-gray-500">
-          <p>Use your Supabase credentials to log in.</p>
-        </div>
-      </div>
+        <p className="mt-8 text-center text-sm text-gray-500">
+          By signing in, you agree to our{' '}
+          <a href="#" className="text-primary-600 hover:text-primary-700 hover:underline">Terms of Service</a>
+          {' '}and{' '}
+          <a href="#" className="text-primary-600 hover:text-primary-700 hover:underline">Privacy Policy</a>
+        </p>
+      </motion.div>
     </div>
   );
 };

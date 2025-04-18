@@ -47,7 +47,7 @@ serve(async (req) => {
           <p>You have been requested to sign the document "${documentTitle}".</p>
           <p>Please click the link below to review and sign the document:</p>
           <p><a href="${documentUrl}">${documentUrl}</a></p>
-          <p>Thank you,<br>The DocuChain Team</p>
+          <p>Thank you,<br>The SealTrack Team</p>
         `,
       },
     });

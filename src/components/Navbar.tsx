@@ -81,17 +81,9 @@ const Navbar: React.FC = () => {
     <nav className="bg-white border-b border-gray-200 px-4 py-2.5 sticky top-0 z-50">
       <div className="flex flex-wrap justify-between items-center">
         <div className="flex items-center">
-          <Link to="/documents" className="flex items-center mr-8">
-            <svg
-              className="w-8 h-8 mr-2 text-docuchain-primary"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              <path d="M6.75 5.25h10.5a1.5 1.5 0 0 1 1.5 1.5v10.5a1.5 1.5 0 0 1-1.5 1.5H6.75a1.5 1.5 0 0 1-1.5-1.5V6.75a1.5 1.5 0 0 1 1.5-1.5Z" />
-            </svg>
-            <span className="text-xl font-semibold whitespace-nowrap text-docuchain-primary">DocuChain</span>
+          <Link to="/" className="flex items-center">
+            <img src="/SealTrack.png" className="h-8 mr-2" alt="SealTrack Logo" />
+            <span className="text-xl font-semibold whitespace-nowrap text-sealtrack-primary">SealTrack</span>
           </Link>
           <div className="hidden md:flex space-x-2">
             <Link to="/documents">

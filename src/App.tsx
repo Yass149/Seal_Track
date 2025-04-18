@@ -23,6 +23,7 @@ import Invitations from "./pages/Invitations";
 import NotFound from "./pages/NotFound";
 import Navbar from "./components/Navbar";
 import { useAuth } from "./context/AuthContext";
+import CreateTemplate from "./pages/CreateTemplate";
 
 // Protected route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -63,6 +64,7 @@ const AppRoutes = () => {
       <Route path="/documents/create" element={<ProtectedRoute><CreateDocument /></ProtectedRoute>} />
       <Route path="/documents/:id" element={<ProtectedRoute><DocumentDetail /></ProtectedRoute>} />
       <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+      <Route path="/templates/create" element={<ProtectedRoute><CreateTemplate /></ProtectedRoute>} />
       <Route path="/templates/:id" element={<ProtectedRoute><EditTemplate /></ProtectedRoute>} />
       <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
       <Route path="/invitations" element={<ProtectedRoute><Invitations /></ProtectedRoute>} />

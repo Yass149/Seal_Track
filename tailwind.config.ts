@@ -1,4 +1,3 @@
-
 import type { Config } from "tailwindcss";
 
 export default {
@@ -26,12 +25,46 @@ export default {
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
 				primary: {
-					DEFAULT: 'hsl(var(--primary))',
-					foreground: 'hsl(var(--primary-foreground))'
+					DEFAULT: '#7C3AED',
+					foreground: 'hsl(var(--primary-foreground))',
+					50: '#F5F3FF',
+					100: '#EDE9FE',
+					200: '#DDD6FE',
+					300: '#C4B5FD',
+					400: '#A78BFA',
+					500: '#8B5CF6',
+					600: '#7C3AED',
+					700: '#6D28D9',
+					800: '#5B21B6',
+					900: '#4C1D95',
 				},
 				secondary: {
-					DEFAULT: 'hsl(var(--secondary))',
-					foreground: 'hsl(var(--secondary-foreground))'
+					DEFAULT: '#EC4899',
+					foreground: 'hsl(var(--secondary-foreground))',
+					50: '#FDF2F8',
+					100: '#FCE7F3',
+					200: '#FBCFE8',
+					300: '#F9A8D4',
+					400: '#F472B6',
+					500: '#EC4899',
+					600: '#DB2777',
+					700: '#BE185D',
+					800: '#9D174D',
+					900: '#831843',
+				},
+				accent: {
+					DEFAULT: '#06B6D4',
+					foreground: 'hsl(var(--accent-foreground))',
+					50: '#ECFEFF',
+					100: '#CFFAFE',
+					200: '#A5F3FC',
+					300: '#67E8F9',
+					400: '#22D3EE',
+					500: '#06B6D4',
+					600: '#0891B2',
+					700: '#0E7490',
+					800: '#155E75',
+					900: '#164E63',
 				},
 				destructive: {
 					DEFAULT: 'hsl(var(--destructive))',
@@ -40,10 +73,6 @@ export default {
 				muted: {
 					DEFAULT: 'hsl(var(--muted))',
 					foreground: 'hsl(var(--muted-foreground))'
-				},
-				accent: {
-					DEFAULT: 'hsl(var(--accent))',
-					foreground: 'hsl(var(--accent-foreground))'
 				},
 				popover: {
 					DEFAULT: 'hsl(var(--popover))',
@@ -75,7 +104,7 @@ export default {
 					800: '#0e33ba',
 					900: '#122c93',
 				},
-				docuchain: {
+				sealtrack: {
 					primary: '#1e3a8a',
 					secondary: '#0ea5e9',
 					accent: '#06b6d4',
@@ -105,21 +134,32 @@ export default {
 						height: '0'
 					}
 				},
-				'pulse-subtle': {
-					'0%, 100%': {
-						opacity: '1'
-					},
-					'50%': {
-						opacity: '0.8'
-					}
-				}
+				'fade-in': {
+					from: { opacity: '0' },
+					to: { opacity: '1' },
+				},
+				'fade-up': {
+					from: { opacity: '0', transform: 'translateY(20px)' },
+					to: { opacity: '1', transform: 'translateY(0)' },
+				},
+				'slide-in': {
+					from: { transform: 'translateX(-100%)' },
+					to: { transform: 'translateX(0)' },
+				},
+				float: {
+					'0%, 100%': { transform: 'translateY(0)' },
+					'50%': { transform: 'translateY(-10px)' },
+				},
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
-				'pulse-subtle': 'pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+				'fade-in': 'fade-in 0.5s ease-out',
+				'fade-up': 'fade-up 0.5s ease-out',
+				'slide-in': 'slide-in 0.5s ease-out',
+				'float': 'float 6s ease-in-out infinite',
 			}
 		}
 	},
-	plugins: [require("tailwindcss-animate")],
+	plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],
 } satisfies Config;

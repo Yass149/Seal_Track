@@ -2,6 +2,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { PDFDocument, StandardFonts, rgb } from 'https://esm.sh/pdf-lib@1.17.1';
+import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.43/deno-dom-wasm.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
@@ -30,6 +31,76 @@ function formatHash(hash: string): string {
   // Take first 8 characters and last 8 characters
   const shortHash = `${hash.substring(0, 8)}...${hash.substring(hash.length - 8)}`;
   return shortHash;
+}
+
+function parseHTML(html: string): string {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    if (!doc) return html;
+
+    // Function to extract text content recursively
+    function extractText(node: any): string {
+      if (node.nodeType === 3) { // Text node
+        return node.textContent;
+      }
+
+      const children = Array.from(node.childNodes);
+      let text = '';
+
+      for (const child of children) {
+        if (child.nodeType === 1) { // Element node
+          const tagName = child.tagName.toLowerCase();
+          
+          // Handle different HTML elements
+          switch (tagName) {
+            case 'p':
+              text += extractText(child) + '\n\n';
+              break;
+            case 'br':
+              text += '\n';
+              break;
+            case 'h1':
+            case 'h2':
+            case 'h3':
+            case 'h4':
+            case 'h5':
+            case 'h6':
+              text += extractText(child).toUpperCase() + '\n\n';
+              break;
+            case 'ul':
+            case 'ol':
+              text += '\n';
+              for (const li of child.querySelectorAll('li')) {
+                text += '• ' + extractText(li) + '\n';
+              }
+              text += '\n';
+              break;
+            case 'table':
+              for (const row of child.querySelectorAll('tr')) {
+                const cells = Array.from(row.querySelectorAll('td, th'))
+                  .map(cell => extractText(cell).trim())
+                  .join(' | ');
+                text += cells + '\n';
+              }
+              text += '\n';
+              break;
+            default:
+              text += extractText(child);
+          }
+        } else {
+          text += extractText(child);
+        }
+      }
+      return text;
+    }
+
+    return extractText(doc.body).trim();
+  } catch (error) {
+    console.error('Error parsing HTML:', error);
+    // Return original content if parsing fails
+    return html;
+  }
 }
 
 async function generatePDF(data: DocumentData): Promise<Uint8Array> {
@@ -81,9 +152,9 @@ async function generatePDF(data: DocumentData): Promise<Uint8Array> {
       y -= lineHeight * 2;
     }
     
-    // Process content with proper legal document formatting
-    const lines = data.content.split('\n');
-    let currentSection = '';
+    // Parse and process content
+    const parsedContent = parseHTML(data.content);
+    const lines = parsedContent.split('\n');
     
     for (const line of lines) {
       const trimmedLine = line.trim();
@@ -102,72 +173,23 @@ async function generatePDF(data: DocumentData): Promise<Uint8Array> {
       
       if (isHeader) {
         y -= paragraphSpacing;
-        
-        // Handle section headers
-        const sectionMatch = trimmedLine.match(/^(\d+)\./);
-        if (sectionMatch) {
-          currentSection = sectionMatch[1];
-          currentPage.drawText(trimmedLine, {
-            x: margin,
-            y,
-            size: subtitleFontSize,
-            font: helveticaBold,
-            color: rgb(0, 0, 0),
-          });
-        } else {
-          currentPage.drawText(trimmedLine, {
-            x: margin,
-            y,
-            size: subtitleFontSize,
-            font: helveticaBold,
-            color: rgb(0, 0, 0),
-          });
-        }
+        currentPage.drawText(trimmedLine, {
+          x: margin,
+          y,
+          size: subtitleFontSize,
+          font: helveticaBold,
+          color: rgb(0, 0, 0),
+        });
         y -= subtitleFontSize + lineHeight;
       } else {
-        // Handle subsections and content
-        if (trimmedLine.match(/^\d+\.\d+/)) {
-          currentPage.drawText(trimmedLine, {
-            x: margin + 20,
-            y,
-            size: bodyFontSize,
-            font: helveticaFont,
-            color: rgb(0, 0, 0),
-          });
-          y -= lineHeight;
-        } else if (trimmedLine.startsWith('-')) {
-          currentPage.drawText(trimmedLine, {
-            x: margin + 20,
-            y,
-            size: bodyFontSize,
-            font: helveticaFont,
-            color: rgb(0, 0, 0),
-          });
-          y -= lineHeight;
-        } else {
-          const words = trimmedLine.split(' ');
-          let currentLine = '';
+        const words = trimmedLine.split(' ');
+        let currentLine = '';
+        
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          const textWidth = helveticaFont.widthOfTextAtSize(testLine, bodyFontSize);
           
-          for (const word of words) {
-            const testLine = currentLine ? `${currentLine} ${word}` : word;
-            const textWidth = helveticaFont.widthOfTextAtSize(testLine, bodyFontSize);
-            
-            if (textWidth > width - (margin * 2)) {
-              currentPage.drawText(currentLine, {
-                x: margin,
-                y,
-                size: bodyFontSize,
-                font: helveticaFont,
-                color: rgb(0, 0, 0),
-              });
-              y -= lineHeight;
-              currentLine = word;
-            } else {
-              currentLine = testLine;
-            }
-          }
-          
-          if (currentLine) {
+          if (textWidth > width - (margin * 2)) {
             currentPage.drawText(currentLine, {
               x: margin,
               y,
@@ -176,7 +198,21 @@ async function generatePDF(data: DocumentData): Promise<Uint8Array> {
               color: rgb(0, 0, 0),
             });
             y -= lineHeight;
+            currentLine = word;
+          } else {
+            currentLine = testLine;
           }
+        }
+        
+        if (currentLine) {
+          currentPage.drawText(currentLine, {
+            x: margin,
+            y,
+            size: bodyFontSize,
+            font: helveticaFont,
+            color: rgb(0, 0, 0),
+          });
+          y -= lineHeight;
         }
       }
     }

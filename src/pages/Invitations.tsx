@@ -2,11 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card } from '@/components/ui/card';
-import { Mail, Send, Clock, CheckCircle, XCircle, Trash2, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { 
+  Mail, Send, Clock, CheckCircle, XCircle, Trash2, AlertCircle, 
+  RefreshCw, Users, Calendar, ChevronDown, Filter 
+} from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface Invitation {
   id: string;
@@ -34,6 +49,7 @@ const Invitations = () => {
     email: '',
     message: defaultMessage
   });
+  const [filter, setFilter] = useState<'all' | 'pending' | 'expired'>('all');
 
   // Fetch invitations
   const fetchInvitations = async () => {
@@ -225,91 +241,233 @@ const Invitations = () => {
     }
   };
 
-  return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <div className="space-y-8">
-        {/* Invitation Form */}
-        <Card className="p-6">
-          <h2 className="text-2xl font-semibold mb-6">Send Invitation</h2>
-          <form onSubmit={handleSendInvitation} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                Recipient Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="colleague@company.com"
-                value={invitationData.email}
-                onChange={(e) => setInvitationData(prev => ({ ...prev, email: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="message" className="text-sm font-medium">
-                Invitation Message
-              </label>
-              <Textarea
-                id="message"
-                placeholder="Write your invitation message..."
-                value={invitationData.message}
-                onChange={(e) => setInvitationData(prev => ({ ...prev, message: e.target.value }))}
-                required
-                className="min-h-[200px]"
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              <Send className="w-4 h-4 mr-2" />
-              {loading ? 'Sending...' : 'Send Invitation'}
-            </Button>
-          </form>
-        </Card>
+  const getStatusBadgeVariant = (status: string, expiresAt: string) => {
+    const isExpired = new Date(expiresAt) < new Date();
+    if (isExpired && ['pending', 'sent'].includes(status)) {
+      return 'secondary';
+    }
+    switch (status) {
+      case 'accepted':
+        return 'outline';
+      case 'error':
+        return 'destructive';
+      case 'expired':
+        return 'secondary';
+      default:
+        return 'secondary';
+    }
+  };
 
-        {/* Sent Invitations */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Sent Invitations</h3>
-          {invitations.length > 0 ? (
-            <div className="space-y-3">
-              {invitations.map((invitation) => (
-                <Card key={invitation.id} className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center">
-                        <Mail className="w-4 h-4 mr-2" />
-                        <span className="font-medium">{invitation.recipient_email}</span>
-                      </div>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Clock className="w-4 h-4 mr-2" />
-                        {new Date(invitation.created_at).toLocaleDateString()}
-                      </div>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <span>Expires: {new Date(invitation.expires_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="flex items-center">
-                        {getStatusIcon(invitation.status, invitation.expires_at)}
-                        <span className="ml-1">{getStatusText(invitation.status, invitation.expires_at)}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteInvitation(invitation.id)}
-                        className="text-red-600 hover:text-red-700"
+  const filteredInvitations = invitations.filter(invitation => {
+    const isExpired = new Date(invitation.expires_at) < new Date();
+    switch (filter) {
+      case 'pending':
+        return !isExpired && ['pending', 'sent'].includes(invitation.status);
+      case 'expired':
+        return isExpired || invitation.status === 'expired';
+      default:
+        return true;
+    }
+  });
+
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const item = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto py-8 px-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-8"
+        >
+          {/* Header */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Invitations</h1>
+              <p className="text-gray-500 mt-1">Manage and track your sent invitations</p>
+              <div className="flex flex-wrap gap-3 mt-3">
+                <Badge variant="secondary" className="gap-1">
+                  <Users className="w-3 h-3" />
+                  {invitations.length} Total
+                </Badge>
+                <Badge variant="outline" className="gap-1">
+                  <Clock className="w-3 h-3" />
+                  {invitations.filter(inv => new Date(inv.expires_at) > new Date() && ['pending', 'sent'].includes(inv.status)).length} Pending
+                </Badge>
+                <Badge variant="secondary" className="gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {invitations.filter(inv => new Date(inv.expires_at) < new Date() || inv.status === 'expired').length} Expired
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          {/* Invitation Form */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Send Invitation</CardTitle>
+              <CardDescription>
+                Invite someone to join DocuChain and collaborate on documents
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSendInvitation} className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="email" className="text-sm font-medium">
+                    Recipient Email
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="colleague@company.com"
+                    value={invitationData.email}
+                    onChange={(e) => setInvitationData(prev => ({ ...prev, email: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="message" className="text-sm font-medium">
+                    Invitation Message
+                  </label>
+                  <Textarea
+                    id="message"
+                    placeholder="Write your invitation message..."
+                    value={invitationData.message}
+                    onChange={(e) => setInvitationData(prev => ({ ...prev, message: e.target.value }))}
+                    required
+                    className="min-h-[200px]"
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-primary-600 hover:bg-primary-700" disabled={loading}>
+                  <Send className="w-4 h-4 mr-2" />
+                  {loading ? 'Sending...' : 'Send Invitation'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Sent Invitations */}
+          <Card>
+            <CardHeader className="pb-0">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <CardTitle>Sent Invitations</CardTitle>
+                  <CardDescription>Track the status of your sent invitations</CardDescription>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      <Filter className="w-4 h-4" />
+                      {filter === 'all' ? 'All Invitations' : 
+                       filter === 'pending' ? 'Pending' : 'Expired'}
+                      <ChevronDown className="w-4 h-4 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[200px]">
+                    <DropdownMenuItem onClick={() => setFilter('all')}>
+                      All Invitations
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setFilter('pending')}>
+                      Pending
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setFilter('expired')}>
+                      Expired
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <AnimatePresence mode="wait">
+                {filteredInvitations.length === 0 ? (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="text-center py-12"
+                  >
+                    <Mail className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-4 text-lg font-semibold text-gray-900">No invitations found</h3>
+                    <p className="text-gray-500 mt-1">
+                      {filter === 'all' 
+                        ? "You haven't sent any invitations yet" 
+                        : `No ${filter} invitations found`}
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    variants={container}
+                    initial="hidden"
+                    animate="show"
+                    className="space-y-4"
+                  >
+                    {filteredInvitations.map((invitation) => (
+                      <motion.div
+                        key={invitation.id}
+                        variants={item}
+                        layout
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center text-muted-foreground py-8">
-              No invitations sent yet
-            </div>
-          )}
-        </div>
+                        <Card className="group">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1">
+                                <div className="flex items-center">
+                                  <Mail className="w-4 h-4 mr-2 text-primary-500" />
+                                  <span className="font-medium">{invitation.recipient_email}</span>
+                                </div>
+                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                  <div className="flex items-center">
+                                    <Calendar className="w-4 h-4 mr-1" />
+                                    Sent {new Date(invitation.created_at).toLocaleDateString()}
+                                  </div>
+                                  <Separator orientation="vertical" className="h-4" />
+                                  <div className="flex items-center">
+                                    <Clock className="w-4 h-4 mr-1" />
+                                    Expires {new Date(invitation.expires_at).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Badge variant={getStatusBadgeVariant(invitation.status, invitation.expires_at)}>
+                                  <span className="flex items-center gap-1">
+                                    {getStatusIcon(invitation.status, invitation.expires_at)}
+                                    {getStatusText(invitation.status, invitation.expires_at)}
+                                  </span>
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteInvitation(invitation.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </div>
   );

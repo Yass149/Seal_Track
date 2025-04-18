@@ -80,11 +80,11 @@ serve(async (req) => {
     // Proceed with sending the invitation email
     console.log('Preparing to send email to:', recipientEmail);
 
-    const emailContent = `
+    const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #4F46E5;">Join DocuChain</h2>
+        <h2 style="color: #4F46E5;">Join SealTrack</h2>
         <p>Hello,</p>
-        <p>${senderName} has invited you to join DocuChain, a secure document signing platform.</p>
+        <p>${senderName} has invited you to join SealTrack, a secure document signing platform.</p>
         ${message ? `<p>Message from ${senderName}:</p><p style="font-style: italic;">${message}</p>` : ''}
         <p>Click the button below to accept the invitation and create your account:</p>
         <p style="margin: 30px 0;">
@@ -98,30 +98,22 @@ serve(async (req) => {
         <p style="color: #666;">If the button doesn't work, copy and paste this link into your browser:</p>
         <p style="color: #666; font-size: 14px;">${invitationLink}</p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-        <p style="color: #666; font-size: 12px;">This is an automated message from DocuChain. Please do not reply to this email.</p>
+        <p style="color: #666; font-size: 12px;">This is an automated message from SealTrack. Please do not reply to this email.</p>
       </div>
     `;
 
     console.log('Sending email via SendGrid');
-    const emailPayload = {
-      personalizations: [
-        {
-          to: [
-            {
-              email: recipientEmail
-            }
-          ]
-        }
-      ],
+    const msg = {
+      to: recipientEmail,
       from: {
-        email: SENDER_EMAIL,
-        name: 'DocuChain'
+        email: 'noreply@example.com',
+        name: 'SealTrack'
       },
-      subject: `${senderName} invited you to join DocuChain`,
+      subject: `${senderName} invited you to join SealTrack`,
       content: [
         {
           type: 'text/html',
-          value: emailContent
+          value: emailHtml
         }
       ]
     };
@@ -134,7 +126,7 @@ serve(async (req) => {
           'Authorization': `Bearer ${SENDGRID_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(emailPayload)
+        body: JSON.stringify(msg)
       });
 
       console.log('SendGrid response status:', response.status);

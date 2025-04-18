@@ -19,6 +19,7 @@ import SignatureCanvas from '@/components/SignatureCanvas';
 import { cn } from '@/lib/utils';
 import { ethers } from 'ethers';
 import { supabase } from '@/lib/supabase';
+import { motion } from 'framer-motion';
 
 const DocumentDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -340,376 +341,440 @@ const DocumentDetail = () => {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="flex flex-col md:flex-row items-start justify-between mb-6">
-        <div className="mb-4 md:mb-0">
-          <Button variant="outline" className="mb-4" onClick={() => navigate('/documents')}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Documents
-          </Button>
-          <h1 className="text-3xl font-bold">{document.title}</h1>
-          <div className="flex items-center gap-2 mt-2">
-            {getStatusBadge()}
-            {document.blockchain_hash && (
-              <Badge className="flex items-center gap-1 bg-indigo-100 text-indigo-800">
-                <Shield className="w-3 h-3" /> Verified on Blockchain
-              </Badge>
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto py-8 px-4">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col md:flex-row items-start justify-between mb-6 bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+        >
+          <div className="mb-4 md:mb-0">
+            <Button 
+              variant="ghost" 
+              className="mb-4 hover:bg-gray-100 -ml-2" 
+              onClick={() => navigate('/documents')}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Documents
+            </Button>
+            <h1 className="text-3xl font-bold text-gray-900">{document.title}</h1>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {getStatusBadge()}
+              {document.blockchain_hash && (
+                <Badge className="flex items-center gap-1 bg-accent-50 text-accent-700 hover:bg-accent-100 border-accent-200">
+                  <Shield className="w-3 h-3" /> Verified on Blockchain
+                </Badge>
+              )}
+            </div>
+            <p className="text-gray-500 mt-2 max-w-2xl">{document.description}</p>
+          </div>
+          <div className="flex flex-col gap-2 min-w-[200px]">
+            <Button 
+              variant="outline" 
+              onClick={handleVerify} 
+              className="w-full gap-2 hover:bg-gray-50"
+              disabled={verifying || !document.blockchain_hash}
+            >
+              {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+              Verify
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleEdit} 
+              className="w-full gap-2 hover:bg-gray-50" 
+              disabled={document.status === 'completed'}
+            >
+              <Edit className="h-4 w-4" /> Edit
+            </Button>
+            <Button 
+              onClick={handleSign} 
+              className="w-full gap-2 bg-primary-600 hover:bg-primary-700" 
+              disabled={document.status === 'completed' || userHasSigned || !currentUserSigner}
+            >
+              {document.status === 'completed' || userHasSigned ? (
+                <>
+                  <CheckCircle className="h-4 w-4" /> Signed
+                </>
+              ) : (
+                <>
+                  <Pencil className="h-4 w-4" /> Sign Document
+                </>
+              )}
+            </Button>
+            {document && document.signers.every(signer => signer.has_signed) && (
+              <Button
+                variant="outline"
+                onClick={handleDownloadPDF}
+                disabled={loading}
+                className="w-full gap-2 hover:bg-gray-50"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Download PDF
+              </Button>
             )}
           </div>
-          <p className="text-muted-foreground mt-2">{document.description}</p>
-        </div>
-        <div className="flex flex-col gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleVerify} 
-            className="gap-2"
-            disabled={verifying || !document.blockchain_hash}
-          >
-            {verifying ? <span className="animate-spin mr-2">●</span> : <Shield className="h-4 w-4" />}
-            Verify
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={handleEdit} 
-            className="gap-2" 
-            disabled={document.status === 'completed'}
-          >
-            <Pencil className="h-4 w-4" /> Edit
-          </Button>
-          <Button 
-            onClick={handleSign} 
-            className="gap-2" 
-            disabled={document.status === 'completed' || userHasSigned || !currentUserSigner}
-          >
-            {document.status === 'completed' || userHasSigned ? 'Signed' : 'Sign Document'}
-          </Button>
-          {document && document.signers.every(signer => signer.has_signed) && (
-            <Button
-              variant="outline"
-              onClick={handleDownloadPDF}
-              disabled={loading}
-              className="gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Download PDF
-            </Button>
-          )}
-        </div>
-      </div>
+        </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Document Details</CardTitle>
-            </CardHeader>
-            <Tabs defaultValue="content" className="w-full" onValueChange={setActiveTab}>
-              <CardContent>
-                <TabsList className="mb-4">
-                  <TabsTrigger value="content">Content</TabsTrigger>
-                  <TabsTrigger value="history">History</TabsTrigger>
-                  <TabsTrigger value="verification">Verification</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="content" className="mt-0">
-                  <div className="p-4 bg-gray-50 border rounded-md min-h-[400px] whitespace-pre-wrap">
-                    {document.content}
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="history" className="mt-0">
-                  <div className="p-4 border rounded-md min-h-[400px]">
-                    <p className="text-sm text-muted-foreground mb-4">Document activity history</p>
-                    <ul className="space-y-4">
-                      <li className="flex items-start gap-4">
-                        <div className="bg-blue-100 p-2 rounded-full">
-                          <FileText className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">Document created</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(document.created_at).toLocaleString()}
-                          </p>
-                        </div>
-                      </li>
-                      {document.signers.filter(signer => signer.has_signed).map((signer) => (
-                        <li key={signer.id} className="flex items-start gap-4">
-                          <div className="bg-green-100 p-2 rounded-full">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="lg:col-span-2"
+          >
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-gray-50">
+                <CardTitle className="text-xl">Document Details</CardTitle>
+              </CardHeader>
+              <Tabs defaultValue="content" className="w-full" onValueChange={setActiveTab}>
+                <CardContent>
+                  <TabsList className="mb-4 bg-gray-100 p-1">
+                    <TabsTrigger 
+                      value="content"
+                      className="data-[state=active]:bg-white data-[state=active]:text-primary-700"
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Content
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="history"
+                      className="data-[state=active]:bg-white data-[state=active]:text-primary-700"
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      History
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="verification"
+                      className="data-[state=active]:bg-white data-[state=active]:text-primary-700"
+                    >
+                      <Shield className="w-4 h-4 mr-2" />
+                      Verification
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="content" className="mt-0">
+                    <div 
+                      className="prose max-w-none p-6 bg-gray-50 border rounded-lg min-h-[400px]"
+                      dangerouslySetInnerHTML={{ 
+                        __html: document.content
+                      }}
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="history" className="mt-0">
+                    <div className="p-6 rounded-lg min-h-[400px]">
+                      <div className="flex items-center gap-2 mb-6">
+                        <Calendar className="w-5 h-5 text-primary-600" />
+                        <h3 className="font-semibold text-lg">Document Timeline</h3>
+                      </div>
+                      <ul className="space-y-6">
+                        <li className="flex items-start gap-4">
+                          <div className="bg-blue-100 p-2 rounded-full mt-1">
+                            <FileText className="h-4 w-4 text-blue-600" />
                           </div>
                           <div>
-                            <p className="font-medium">{signer.name} signed the document</p>
-                            <p className="text-sm text-muted-foreground">
-                              {signer.signature_timestamp ? new Date(signer.signature_timestamp).toLocaleString() : 'Unknown date'}
+                            <p className="font-medium text-gray-900">Document created</p>
+                            <p className="text-sm text-gray-500">
+                              {new Date(document.created_at).toLocaleString()}
                             </p>
                           </div>
                         </li>
-                      ))}
-                    </ul>
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="verification" className="mt-0">
-                  <div className="p-4 border rounded-md min-h-[400px]">
-                    <div className="flex items-center justify-between mb-4">
-                      <p className="text-sm text-muted-foreground">Document verification status</p>
-                      <Button 
-                        variant="outline" 
-                        onClick={handleVerify}
-                        disabled={verifying}
-                        className="gap-2"
-                      >
-                        {verifying ? (
-                          <span className="animate-spin mr-2">●</span>
-                        ) : (
-                          <Shield className="h-4 w-4" />
-                        )}
-                        Verify Now
-                      </Button>
+                        {document.signers.filter(signer => signer.has_signed).map((signer) => (
+                          <li key={signer.id} className="flex items-start gap-4">
+                            <div className="bg-green-100 p-2 rounded-full mt-1">
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{signer.name} signed the document</p>
+                              <p className="text-sm text-gray-500">
+                                {signer.signature_timestamp ? new Date(signer.signature_timestamp).toLocaleString() : 'Unknown date'}
+                              </p>
+                              {signer.signature_hash && (
+                                <p className="text-xs font-mono mt-1 text-gray-500 break-all">
+                                  Hash: {signer.signature_hash}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    
-                    <div className="space-y-4">
+                  </TabsContent>
+                  
+                  <TabsContent value="verification" className="mt-0">
+                    <div className="p-6 rounded-lg min-h-[400px] space-y-8">
                       {/* Verification Status */}
-                      <div className={cn(
-                        "p-4 border rounded-md",
-                        document.is_authentic 
-                          ? "bg-green-50 border-green-200" 
-                          : document.is_authentic === false
-                            ? "bg-red-50 border-red-200"
-                            : "bg-amber-50 border-amber-200"
-                      )}>
+                      <div className="space-y-4">
                         <div className="flex items-center gap-2">
-                          {document.is_authentic ? (
-                            <>
-                              <Shield className="h-5 w-5 text-green-700" />
-                              <p className="font-medium text-green-700">Document is verified and authentic</p>
-                            </>
-                          ) : document.is_authentic === false ? (
-                            <>
-                              <AlertTriangle className="h-5 w-5 text-red-700" />
-                              <p className="font-medium text-red-700">Document verification failed</p>
-                            </>
-                          ) : (
-                            <>
-                              <AlertCircle className="h-5 w-5 text-amber-700" />
-                              <p className="font-medium text-amber-700">Document not yet verified</p>
-                            </>
-                          )}
+                          <Shield className="w-5 h-5 text-primary-600" />
+                          <h3 className="font-semibold text-lg">Verification Status</h3>
                         </div>
-                        <p className="mt-2 text-sm">
-                          {document.is_authentic
-                            ? `Last verified: ${document.last_verified_at 
-                                ? new Date(document.last_verified_at).toLocaleString()
-                                : 'Unknown'}`
-                            : document.is_authentic === false
-                              ? "The document may have been tampered with or corrupted."
-                              : "Click 'Verify Now' to check document authenticity."}
-                        </p>
+                        <div className="p-4 rounded-lg border bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            {document.is_authentic ? (
+                              <div className="bg-green-100 p-2 rounded-full">
+                                <CheckCircle className="w-5 h-5 text-green-600" />
+                              </div>
+                            ) : document.is_authentic === false ? (
+                              <div className="bg-red-100 p-2 rounded-full">
+                                <AlertTriangle className="w-5 h-5 text-red-600" />
+                              </div>
+                            ) : (
+                              <div className="bg-gray-100 p-2 rounded-full">
+                                <Shield className="w-5 h-5 text-gray-600" />
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium">
+                                {document.is_authentic
+                                  ? "Document is authentic"
+                                  : document.is_authentic === false
+                                    ? "Document verification failed"
+                                    : "Document not yet verified"}
+                              </p>
+                              <p className="text-sm text-gray-500 mt-1">
+                                {document.is_authentic
+                                  ? `Last verified: ${document.last_verified_at 
+                                      ? new Date(document.last_verified_at).toLocaleString()
+                                      : 'Unknown'}`
+                                  : document.is_authentic === false
+                                    ? "The document may have been tampered with or corrupted."
+                                    : "Click 'Verify' to check document authenticity."}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Document Hash */}
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Document Hash</p>
-                        <div className="p-3 bg-gray-50 rounded-md border">
-                          <p className="text-sm font-mono break-all">
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-5 h-5 text-primary-600" />
+                          <h3 className="font-semibold text-lg">Document Hash</h3>
+                        </div>
+                        <div className="p-4 bg-gray-50 rounded-lg border">
+                          <p className="text-sm font-mono break-all text-gray-700">
                             {document.document_hash || 'Not available'}
                           </p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            This is a unique fingerprint of your document's content and metadata.
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          This is a unique fingerprint of your document's content and metadata.
-                        </p>
                       </div>
 
-                      {/* Signatures */}
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Signatures</p>
-                        <div className="space-y-2">
-                          {document.signers.map((signer) => (
-                            <div key={signer.id} className="p-3 bg-gray-50 rounded-md border">
-                              <div className="flex items-center justify-between mb-1">
-                                <p className="text-sm font-medium">{signer.name}</p>
-                                {signer.has_signed ? (
-                                  <Badge className="bg-green-100 text-green-800">
-                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                    Signed
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline">
-                                    <Clock className="w-3 h-3 mr-1" />
-                                    Pending
-                                  </Badge>
-                                )}
-                              </div>
-                              {signer.has_signed && (
-                                <>
-                                  <p className="text-xs text-muted-foreground mb-1">
-                                    Signed on: {new Date(signer.signature_timestamp!).toLocaleString()}
-                                  </p>
-                                  <p className="text-xs font-mono break-all">
-                                    Hash: {signer.signature_hash}
-                                  </p>
-                                </>
+                      {/* Blockchain Hash */}
+                      {document.blockchain_hash && (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <Shield className="w-5 h-5 text-primary-600" />
+                            <h3 className="font-semibold text-lg">Blockchain Hash</h3>
+                          </div>
+                          <div className="p-4 bg-gray-50 rounded-lg border">
+                            <p className="text-sm font-mono break-all text-gray-700">
+                              {document.blockchain_hash}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-2">
+                              This document has been verified and stored on the blockchain.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </CardContent>
+              </Tabs>
+            </Card>
+          </motion.div>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="space-y-6"
+          >
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-gray-50">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Users className="h-5 w-5" /> Signers
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {document.signers.length === 0 ? (
+                  <div className="text-center py-6">
+                    <Users className="mx-auto h-12 w-12 text-gray-400" />
+                    <p className="mt-2 font-medium text-gray-900">No signers yet</p>
+                    <p className="text-sm text-gray-500">Add signers to get started</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Signature Status</span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex -space-x-2">
+                          {document.signers.map((signer, index) => (
+                            <div
+                              key={signer.id}
+                              className={cn(
+                                "w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-xs font-medium",
+                                signer.has_signed ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
                               )}
+                              style={{ zIndex: document.signers.length - index }}
+                            >
+                              {signer.name.charAt(0).toUpperCase()}
                             </div>
                           ))}
                         </div>
+                        <span className="text-sm font-medium">
+                          {signedCount}/{totalSigners}
+                        </span>
                       </div>
                     </div>
+                    <div className="space-y-4">
+                      {document.signers.map((signer) => (
+                        <motion.div
+                          key={signer.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="p-4 rounded-lg border bg-gray-50"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-medium text-gray-900">{signer.name}</p>
+                              <p className="text-sm text-gray-500">{signer.email}</p>
+                              {signer.signature_timestamp && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Signed on {new Date(signer.signature_timestamp).toLocaleString()}
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              {signer.has_signed ? (
+                                <Badge className="bg-green-50 text-green-700 border-green-200">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Signed
+                                </Badge>
+                              ) : signer.email === user?.email ? (
+                                <Badge className="bg-primary-50 text-primary-700 border-primary-200">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  Your signature needed
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-gray-50 text-gray-700">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  Pending
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
                   </div>
-                </TabsContent>
+                )}
               </CardContent>
-            </Tabs>
-          </Card>
+              <CardFooter className="border-t bg-gray-50">
+                <Button 
+                  variant="outline" 
+                  className="w-full hover:bg-white" 
+                  onClick={() => setAddSignerDialogOpen(true)}
+                  disabled={document.status === 'completed'}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Add Signer
+                </Button>
+              </CardFooter>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-gray-50">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <FileText className="h-5 w-5" /> Document Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <ul className="space-y-4">
+                  <li className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Created</span>
+                    <span className="text-sm font-medium">{new Date(document.created_at).toLocaleDateString()}</span>
+                  </li>
+                  <li className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Category</span>
+                    <span className="text-sm font-medium capitalize">{document.category || 'N/A'}</span>
+                  </li>
+                  <li className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Status</span>
+                    <span className="text-sm font-medium capitalize">{document.status}</span>
+                  </li>
+                  <li className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Template</span>
+                    <span className="text-sm font-medium">{document.template_id ? 'Yes' : 'No'}</span>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
-        
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" /> Signers
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {document.signers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No signers added yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center text-sm font-medium">
-                    <span>Signature Status:</span>
-                    <span>{signedCount}/{totalSigners} signed</span>
-                  </div>
-                  <ul className="space-y-3">
-                    {document.signers.map((signer) => (
-                      <li key={signer.id} className="flex items-center justify-between border-b pb-2">
-                        <div>
-                          <p className="font-medium">{signer.name}</p>
-                          <p className="text-xs text-muted-foreground">{signer.email}</p>
-                          {signer.signature_timestamp && (
-                            <p className="text-xs text-muted-foreground">
-                              Signed on {new Date(signer.signature_timestamp).toLocaleString()}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          {signer.has_signed ? (
-                            <Badge variant="outline" className="bg-green-100 text-green-800">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Signed
-                            </Badge>
-                          ) : signer.email === user?.email ? (
-                            <Badge variant="outline" className="bg-blue-100 text-blue-800">
-                              <Clock className="w-3 h-3 mr-1" />
-                              Your signature needed
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-amber-100 text-amber-800">
-                              <Clock className="w-3 h-3 mr-1" />
-                              Pending
-                            </Badge>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={() => setAddSignerDialogOpen(true)}
-                disabled={document.status === 'completed'}
-              >
-                <Users className="mr-2 h-4 w-4" /> Add Signers
+
+        {/* Add Signer Dialog */}
+        <Dialog open={addSignerDialogOpen} onOpenChange={setAddSignerDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Signer</DialogTitle>
+              <DialogDescription>
+                Add a new signer to this document. They will receive an invitation to sign.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  value={newSignerName}
+                  onChange={(e) => setNewSignerName(e.target.value)}
+                  placeholder="Enter signer's name"
+                  className="border-gray-200 focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newSignerEmail}
+                  onChange={(e) => setNewSignerEmail(e.target.value)}
+                  placeholder="Enter signer's email"
+                  className="border-gray-200 focus:border-primary-300 focus:ring focus:ring-primary-200 focus:ring-opacity-50"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddSignerDialogOpen(false)}>
+                Cancel
               </Button>
-            </CardFooter>
-          </Card>
-          
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" /> Document Info
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2">
-                <li className="flex justify-between">
-                  <span className="text-muted-foreground">Created</span>
-                  <span>{new Date(document.created_at).toLocaleDateString()}</span>
-                </li>
-                <li className="flex justify-between">
-                  <span className="text-muted-foreground">Category</span>
-                  <span className="capitalize">{document.category}</span>
-                </li>
-                <li className="flex justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className="capitalize">{document.status}</span>
-                </li>
-                <li className="flex justify-between">
-                  <span className="text-muted-foreground">Template</span>
-                  <span>{document.template_id ? 'Yes' : 'No'}</span>
-                </li>
-              </ul>
-            </CardContent>
-          </Card>
-        </div>
+              <Button onClick={handleAddSigner} className="bg-primary-600 hover:bg-primary-700">
+                <Plus className="mr-2 h-4 w-4" /> Add Signer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Signature Dialog */}
+        <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Sign Document</DialogTitle>
+              <DialogDescription>
+                Draw your signature below to sign this document.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <SignatureCanvas onSave={handleSignatureSubmit} width={400} height={200} />
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
-
-      {/* Add Signer Dialog */}
-      <Dialog open={addSignerDialogOpen} onOpenChange={setAddSignerDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Signer</DialogTitle>
-            <DialogDescription>
-              Add a new signer to this document. They will receive an invitation to sign.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={newSignerName}
-                onChange={(e) => setNewSignerName(e.target.value)}
-                placeholder="Enter signer's name"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={newSignerEmail}
-                onChange={(e) => setNewSignerEmail(e.target.value)}
-                placeholder="Enter signer's email"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddSignerDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddSigner}>
-              <Plus className="mr-2 h-4 w-4" /> Add Signer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Signature Dialog */}
-      <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Sign Document</DialogTitle>
-            <DialogDescription>
-              Draw your signature below to sign this document.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <SignatureCanvas onSave={handleSignatureSubmit} width={400} height={200} />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
