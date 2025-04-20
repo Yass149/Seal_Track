@@ -87,19 +87,19 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <MessagesProvider>
-          <ContactsProvider>
-            <WalletProvider>
-              <DocumentProvider>
+        <DocumentProvider>
+          <MessagesProvider>
+            <ContactsProvider>
+              <WalletProvider>
                 <Toaster />
                 <Sonner />
                 <BrowserRouter future={router.future}>
                   <AppRoutes />
                 </BrowserRouter>
-              </DocumentProvider>
-            </WalletProvider>
-          </ContactsProvider>
-        </MessagesProvider>
+              </WalletProvider>
+            </ContactsProvider>
+          </MessagesProvider>
+        </DocumentProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

@@ -19,6 +19,7 @@ export class BlockchainService {
     private provider: ethers.providers.Web3Provider;
     private contract: ethers.Contract;
     private contractAddress: string;
+    private MIN_ETH_BALANCE = ethers.utils.parseEther('0.01'); // Minimum 0.01 ETH required
 
     constructor() {
         if (!window.ethereum) {
@@ -77,12 +78,32 @@ export class BlockchainService {
         }
     }
 
+    async checkBalance(): Promise<boolean> {
+        try {
+            const signer = this.provider.getSigner();
+            const balance = await signer.getBalance();
+            return balance.gte(this.MIN_ETH_BALANCE);
+        } catch (error) {
+            console.error('Error checking balance:', error);
+            return false;
+        }
+    }
+
     async storeDocument(documentId: string, hash: string): Promise<boolean> {
         try {
+            console.log('Starting document storage on blockchain:', { documentId, hash });
+            
             // Verify contract exists
             const contractExists = await this.verifyContract();
             if (!contractExists) {
+                console.error('Contract not found at address:', this.contractAddress);
                 throw new Error('Contract not found at the specified address');
+            }
+
+            // Check balance before proceeding
+            const hasBalance = await this.checkBalance();
+            if (!hasBalance) {
+                throw new Error('Insufficient ETH balance. You need at least 0.01 ETH for gas fees. Visit a Sepolia faucet to get test ETH.');
             }
 
             const signer = this.provider.getSigner();
@@ -91,26 +112,38 @@ export class BlockchainService {
             const documentIdBytes = ethers.utils.id(documentId);
             const hashBytes = ethers.utils.id(hash);
             
+            console.log('Estimating gas for transaction...');
             // Estimate gas first
             const gasEstimate = await contractWithSigner.estimateGas.storeDocument(documentIdBytes, hashBytes);
+            console.log('Gas estimate:', gasEstimate.toString());
             
             // Get gas price
             const gasPrice = await this.provider.getGasPrice();
+            console.log('Current gas price:', ethers.utils.formatUnits(gasPrice, 'gwei'), 'gwei');
             
-            // Check if user has enough ETH for gas
+            // Check if user has enough ETH for this specific transaction
             const balance = await signer.getBalance();
             const requiredBalance = gasEstimate.mul(gasPrice);
+            console.log('Required balance:', ethers.utils.formatEther(requiredBalance), 'ETH');
+            console.log('Current balance:', ethers.utils.formatEther(balance), 'ETH');
+            
             if (balance.lt(requiredBalance)) {
-                throw new Error('Insufficient ETH for gas fees');
+                throw new Error(`Insufficient ETH for gas fees. Required: ${ethers.utils.formatEther(requiredBalance)} ETH`);
             }
             
+            console.log('Sending transaction...');
             const tx = await contractWithSigner.storeDocument(documentIdBytes, hashBytes);
+            console.log('Transaction sent:', tx.hash);
+            console.log('Waiting for confirmation...');
+            
             const receipt = await tx.wait();
+            console.log('Transaction confirmed:', receipt);
             
             if (receipt.status === 0) {
                 throw new Error('Transaction failed');
             }
             
+            console.log('Document successfully stored on blockchain');
             return true;
         } catch (error) {
             console.error('Error storing document:', error);

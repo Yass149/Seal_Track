@@ -12,10 +12,6 @@ import { cn } from '@/lib/utils';
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const { 
-    phantomConnected, 
-    phantomPublicKey,
-    connectPhantomWallet, 
-    disconnectPhantomWallet,
     metamaskConnected,
     metamaskPublicKey,
     connectMetaMaskWallet,
@@ -44,38 +40,18 @@ const Navbar: React.FC = () => {
     return location.pathname === path;
   };
 
-  const handleConnectWallets = async () => {
+  const handleConnectMetaMask = async () => {
     try {
-      if (!phantomConnected) {
-        await connectPhantomWallet();
-      }
-      if (!metamaskConnected) {
-        await connectMetaMaskWallet();
-      }
+      await connectMetaMaskWallet();
     } catch (error) {
-      console.error('Failed to connect wallets:', error);
+      console.error('Failed to connect MetaMask:', error);
       toast({
         variant: "destructive",
         title: "Connection Failed",
-        description: "Failed to connect one or more wallets. Please try again.",
+        description: "Failed to connect MetaMask. Please try again.",
       });
     }
   };
-
-  const handleDisconnectWallets = async () => {
-    try {
-      if (phantomConnected) {
-        await disconnectPhantomWallet();
-      }
-      if (metamaskConnected) {
-        await disconnectMetaMaskWallet();
-      }
-    } catch (error) {
-      console.error('Failed to disconnect wallets:', error);
-    }
-  };
-
-  const bothWalletsConnected = phantomConnected && metamaskConnected;
 
   return (
     <nav className="bg-white border-b border-gray-200 px-4 py-2.5 sticky top-0 z-50">
@@ -124,48 +100,33 @@ const Navbar: React.FC = () => {
                 New Document
               </Button>
               
-              {bothWalletsConnected ? (
-                <Button 
-                  variant="outline" 
-                  className={cn("gap-2", "text-green-600")} 
-                  onClick={handleDisconnectWallets}
-                >
-                  <Wallet className="w-4 h-4" />
-                  <span className="hidden sm:inline">Connected</span>
-                  <span className="hidden sm:inline text-xs truncate max-w-[80px]">
-                    {phantomPublicKey?.slice(0, 4)}...{phantomPublicKey?.slice(-4)}
-                  </span>
-                </Button>
-              ) : (
-                <Button 
-                  variant="outline" 
-                  className="gap-2" 
-                  onClick={handleConnectWallets}
-                >
-                  <Wallet className="w-4 h-4" />
-                  <span className="hidden sm:inline">Connect Wallets</span>
-                </Button>
-              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative rounded-full h-8 w-8 p-0">
-                    <Avatar>
-                      <AvatarImage src="" alt={user.email || 'User'} />
-                      <AvatarFallback>{getUserInitials()}</AvatarFallback>
-                    </Avatar>
+                  <Button variant="outline" className="gap-2">
+                    <Wallet className="w-4 h-4" />
+                    {metamaskConnected ? (
+                      <span className="hidden sm:inline">Connected</span>
+                    ) : (
+                      <span className="hidden sm:inline">Connect Wallet</span>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuContent>
+                  <DropdownMenuLabel>Wallet Connection</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate('/profile')}>
-                    <Settings className="w-4 h-4 mr-2" />
-                    Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={logout}>
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Logout
-                  </DropdownMenuItem>
+                  
+                  {/* MetaMask Connection */}
+                  {metamaskConnected ? (
+                    <DropdownMenuItem onClick={() => disconnectMetaMaskWallet()}>
+                      <img src="/metamask.svg" alt="MetaMask" className="w-4 h-4 mr-2" />
+                      <span className="text-red-600">Disconnect MetaMask</span>
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={handleConnectMetaMask}>
+                      <img src="/metamask.svg" alt="MetaMask" className="w-4 h-4 mr-2" />
+                      Connect MetaMask (Sepolia)
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </>

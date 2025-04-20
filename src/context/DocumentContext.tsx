@@ -361,6 +361,20 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
     };
   }, [user]);
 
+  useEffect(() => {
+    const checkBlockchainConnection = async () => {
+      try {
+        const contractExists = await blockchainService.verifyContract();
+        setIsBlockchainConnected(contractExists);
+      } catch (error) {
+        console.error('Error checking blockchain connection:', error);
+        setIsBlockchainConnected(false);
+      }
+    };
+
+    checkBlockchainConnection();
+  }, [blockchainService]);
+
   const handleDocumentUpdate = async (payload: PostgresDocumentPayload) => {
     console.log('Received document update:', payload);
 
@@ -761,13 +775,20 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const connectBlockchainWallet = async () => {
     try {
       await blockchainService.connectWallet();
-      setIsBlockchainConnected(true);
+      const contractExists = await blockchainService.verifyContract();
+      setIsBlockchainConnected(contractExists);
+      
+      if (!contractExists) {
+        throw new Error('Contract not found at the specified address. Please check your environment variables.');
+      }
+
       toast({
         title: "Wallet Connected",
-        description: "Successfully connected wallet",
+        description: "Successfully connected to blockchain",
       });
     } catch (error) {
       console.error('Error connecting wallet:', error);
+      setIsBlockchainConnected(false);
       toast({
         title: "Connection Failed",
         description: error instanceof Error ? error.message : "Failed to connect wallet",
@@ -826,13 +847,27 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
       // Store document hash on blockchain if connected
       if (isBlockchainConnected) {
-        const success = await blockchainService.storeDocument(
-          documentId,
-          signatureHash
-        );
-        if (!success) {
-          throw new Error('Failed to store document hash on blockchain');
+        console.log('Storing document on blockchain:', { documentId, signatureHash });
+        try {
+          const success = await blockchainService.storeDocument(
+            documentId,
+            signatureHash
+          );
+          if (!success) {
+            throw new Error('Failed to store document hash on blockchain');
+          }
+          console.log('Successfully stored document on blockchain');
+        } catch (error) {
+          console.error('Blockchain storage error:', error);
+          toast({
+            title: "Blockchain Storage Failed",
+            description: error instanceof Error ? error.message : "Failed to store document on blockchain",
+            variant: "destructive",
+          });
+          throw error;
         }
+      } else {
+        console.warn('Blockchain not connected, skipping on-chain storage');
       }
 
       // Update document with new signer information and blockchain hash

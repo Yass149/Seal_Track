@@ -3,10 +3,10 @@ pragma solidity ^0.8.19;
 
 contract DocumentVerification {
     struct Document {
-        bytes32 hash;
-        address creator;
-        uint256 timestamp;
-        bool exists;
+        bytes32 hash; // Cryptographic fingerprint of document content and metadata
+        address creator;// Ethereum address of the document owner
+        uint256 timestamp; // Timestamp of when the document was created
+        bool exists; // Flag to check if the document exists
     }
 
     mapping(bytes32 => Document) public documents;

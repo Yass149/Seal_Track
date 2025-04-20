@@ -1,3 +1,4 @@
+import React from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useDocuments, type Document } from '@/context/DocumentContext';
@@ -27,14 +28,7 @@ const DocumentDetail = () => {
   const navigate = useNavigate();
   const { getDocument, verifyDocument, addSignature, updateDocument } = useDocuments();
   const { user } = useAuth();
-  const { 
-    phantomConnected, 
-    connectPhantomWallet, 
-    signWithPhantom,
-    metamaskConnected,
-    connectMetaMaskWallet,
-    signWithMetaMask
-  } = useWallet();
+  const { metamaskConnected, connectMetaMaskWallet, signMessageWithMetaMask } = useWallet();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('content');
   const [signDialogOpen, setSignDialogOpen] = useState(false);
@@ -153,20 +147,6 @@ const DocumentDetail = () => {
       return;
     }
 
-    // First, ensure both wallets are connected
-    if (!phantomConnected) {
-      try {
-        await connectPhantomWallet();
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Phantom Wallet required",
-          description: "Please connect your Phantom wallet to sign documents.",
-        });
-        return;
-      }
-    }
-
     if (!metamaskConnected) {
       try {
         await connectMetaMaskWallet();
@@ -174,7 +154,7 @@ const DocumentDetail = () => {
         toast({
           variant: "destructive",
           title: "MetaMask required",
-          description: "Please connect your MetaMask wallet to verify the document.",
+          description: "Please connect your MetaMask wallet to sign documents.",
         });
         return;
       }
@@ -190,12 +170,11 @@ const DocumentDetail = () => {
         throw new Error('You are not authorized to sign this document');
       }
 
-      // Sign the document hash with Phantom
+      // Calculate document hash
       const documentHash = await calculateDocumentHash(document);
-      const signatureHash = await signWithPhantom(documentHash);
-
-      // Store the document hash on Ethereum
-      await signWithMetaMask(documentHash);
+      
+      // Sign the document hash with MetaMask
+      const signatureHash = await signMessageWithMetaMask(documentHash);
 
       // Add the signature to the document using the current user's signer ID
       await addSignature(document.id, currentUserSigner.id, signatureDataUrl, signatureHash);
