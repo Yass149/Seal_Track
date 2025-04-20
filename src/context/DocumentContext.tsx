@@ -845,9 +845,9 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
       const allSigned = updatedSigners.every(s => s.has_signed);
       const newStatus = allSigned ? 'completed' : 'pending';
 
-      // Store document hash on blockchain if connected
-      if (isBlockchainConnected) {
-        console.log('Storing document on blockchain:', { documentId, signatureHash });
+      // Only store on blockchain if this is the last signature
+      if (allSigned && isBlockchainConnected) {
+        console.log('All signers have signed, storing final document on blockchain:', { documentId, signatureHash });
         try {
           const success = await blockchainService.storeDocument(
             documentId,
@@ -866,20 +866,24 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
           });
           throw error;
         }
-      } else {
-        console.warn('Blockchain not connected, skipping on-chain storage');
       }
 
       // Update document with new signer information and blockchain hash
+      const updateData = {
+        signers: updatedSigners,
+        status: newStatus,
+      };
+
+      // Only update blockchain_hash if all signers have signed
+      if (allSigned) {
+        updateData.blockchain_hash = signatureHash;
+        updateData.is_authentic = true;
+        updateData.last_verified_at = new Date().toISOString();
+      }
+
       const { error: updateError } = await supabase
         .from('documents')
-        .update({
-          signers: updatedSigners,
-          status: newStatus,
-          blockchain_hash: signatureHash,
-          is_authentic: true,
-          last_verified_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', documentId);
 
       if (updateError) {
