@@ -170,18 +170,28 @@ const DocumentDetail = () => {
         throw new Error('You are not authorized to sign this document');
       }
 
-      // Calculate document hash
-      const documentHash = await calculateDocumentHash(document);
+      // Create a combined hash of document content and visual signature
+      const combinedContent = JSON.stringify({
+        documentContent: document,
+        visualSignature: signatureDataUrl,
+        signerId: currentUserSigner.id,
+        timestamp: new Date().toISOString()
+      });
       
-      // Sign the document hash with MetaMask
-      const signatureHash = await signMessageWithMetaMask(documentHash);
+      // Calculate combined hash
+      const combinedHash = ethers.utils.keccak256(
+        ethers.utils.toUtf8Bytes(combinedContent)
+      );
+      
+      // Sign the combined hash with MetaMask
+      const signatureHash = await signMessageWithMetaMask(combinedHash);
 
-      // Add the signature to the document using the current user's signer ID
+      // Add both the visual signature and blockchain signature to the document
       await addSignature(document.id, currentUserSigner.id, signatureDataUrl, signatureHash);
 
       toast({
         title: "Document Signed",
-        description: "Your signature has been successfully added to the document.",
+        description: "Your signature has been successfully added and verified on the blockchain.",
       });
 
       setSignDialogOpen(false);

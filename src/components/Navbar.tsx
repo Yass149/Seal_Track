@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { FileText, PenTool, Users, UserPlus, Settings, LogOut, Wallet, PlusCircle } from 'lucide-react';
+import { FileText, PenTool, Users, UserPlus, Settings, LogOut, Wallet, PlusCircle, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -102,30 +102,71 @@ const Navbar: React.FC = () => {
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2">
+                  <Button 
+                    variant={metamaskConnected ? "default" : "outline"} 
+                    className={cn(
+                      "gap-2 transition-all duration-200",
+                      metamaskConnected && "bg-green-600 hover:bg-green-700 text-white"
+                    )}
+                  >
                     <Wallet className="w-4 h-4" />
                     {metamaskConnected ? (
-                      <span className="hidden sm:inline">Connected</span>
+                      <span className="hidden sm:inline">
+                        {metamaskPublicKey?.slice(0, 6)}...{metamaskPublicKey?.slice(-4)}
+                      </span>
                     ) : (
                       <span className="hidden sm:inline">Connect Wallet</span>
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuLabel>Wallet Connection</DropdownMenuLabel>
+                <DropdownMenuContent className="w-72">
+                  <DropdownMenuLabel className="flex items-center gap-2 text-base">
+                    <Wallet className="w-4 h-4 text-primary-600" />
+                    Wallet Connection
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   
                   {/* MetaMask Connection */}
                   {metamaskConnected ? (
-                    <DropdownMenuItem onClick={() => disconnectMetaMaskWallet()}>
-                      <img src="/metamask.svg" alt="MetaMask" className="w-4 h-4 mr-2" />
-                      <span className="text-red-600">Disconnect MetaMask</span>
-                    </DropdownMenuItem>
+                    <>
+                      <div className="px-2 py-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-600">Connected to MetaMask</span>
+                        </div>
+                        <div className="px-2 py-1.5 bg-muted/50 rounded-md">
+                          <p className="text-xs font-mono text-muted-foreground break-all">
+                            {metamaskPublicKey}
+                          </p>
+                        </div>
+                      </div>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => disconnectMetaMaskWallet()}
+                        className="gap-2 text-red-600 focus:text-red-600"
+                      >
+                        <AlertCircle className="w-4 h-4" />
+                        Disconnect Wallet
+                      </DropdownMenuItem>
+                    </>
                   ) : (
-                    <DropdownMenuItem onClick={handleConnectMetaMask}>
-                      <img src="/metamask.svg" alt="MetaMask" className="w-4 h-4 mr-2" />
-                      Connect MetaMask (Sepolia)
-                    </DropdownMenuItem>
+                    <div className="p-2">
+                      <Button 
+                        onClick={handleConnectMetaMask}
+                        className="w-full gap-2 bg-primary-600 hover:bg-primary-700"
+                      >
+                        <img 
+                          src="/metamask.svg" 
+                          alt="MetaMask" 
+                          className="w-5 h-5" 
+                          style={{ filter: 'brightness(0) invert(1)' }}
+                        />
+                        Connect MetaMask (Sepolia)
+                      </Button>
+                      <p className="mt-2 text-xs text-muted-foreground text-center">
+                        Connect your wallet to sign and verify documents on the blockchain
+                      </p>
+                    </div>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
