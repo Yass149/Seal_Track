@@ -34,7 +34,7 @@ interface Invitation {
 
 const defaultMessage = `Hi there!
 
-I'd like to invite you to join DocuChain, a secure platform for document sharing and collaboration. 
+I'd like to invite you to join SealTrack, a secure platform for document sharing and collaboration. 
 
 You can sign up using this invitation and we can start sharing documents securely.
 
@@ -320,7 +320,7 @@ const Invitations = () => {
             <CardHeader>
               <CardTitle>Send Invitation</CardTitle>
               <CardDescription>
-                Invite someone to join DocuChain and collaborate on documents
+                Invite someone to join SealTrack and collaborate on documents
               </CardDescription>
             </CardHeader>
             <CardContent>
