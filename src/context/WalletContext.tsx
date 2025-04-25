@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { ethers } from 'ethers';
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -17,6 +18,16 @@ interface EthereumProvider {
 
 interface Window {
   ethereum?: EthereumProvider;
+}
+
+interface ExternalProvider {
+  isMetaMask?: boolean;
+  isStatus?: boolean;
+  host?: string;
+  path?: string;
+  sendAsync?: (request: { method: string, params?: Array<unknown> }, callback: (error: unknown, response: unknown) => void) => void
+  send?: (request: { method: string, params?: Array<unknown> }, callback: (error: unknown, response: unknown) => void) => void
+  request?: (request: { method: string, params?: Array<unknown> }) => Promise<unknown>
 }
 
 interface WalletContextType {
@@ -107,30 +118,95 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
+  // Define a type for potential MetaMask errors with a code property
+  type MetaMaskError = {
+    code?: number;
+    message?: string;
+  };
+
   // Sign message with MetaMask
   const signMessageWithMetaMask = async (message: string): Promise<string> => {
+    console.log('[signMessageWithMetaMask] Attempting to sign message:', message);
+    if (!metamaskConnected || !metamaskPublicKey) {
+      console.error('[signMessageWithMetaMask] Error: MetaMask wallet not connected.');
+      throw new Error('MetaMask wallet not connected. Please connect your wallet.');
+    }
+
     try {
-      if (!metamaskConnected || !metamaskPublicKey) {
-        throw new Error('MetaMask wallet not connected');
+      // 1. Get the provider using ethers.providers.Web3Provider
+      const ethProvider = (window as unknown as Window).ethereum;
+      if (!ethProvider) {
+        console.error('[signMessageWithMetaMask] Error: MetaMask ethereum provider not found on window.');
+        throw new Error('MetaMask is not installed or not detected.');
+      }
+      
+      // --- Log the raw provider object --- 
+      console.log('[signMessageWithMetaMask] Raw window.ethereum object:', ethProvider);
+      // --- End Log ---
+      
+      // Cast to ExternalProvider for Web3Provider constructor
+      const provider = new ethers.providers.Web3Provider(ethProvider as ExternalProvider);
+      
+      // 2. Get the signer
+      const signer = await provider.getSigner();
+      if (!signer) {
+        console.error('[signMessageWithMetaMask] Error: Could not get signer from provider.');
+        throw new Error('Could not get signer from MetaMask. Ensure your wallet is unlocked and connected.');
       }
 
-      const provider = (window as unknown as Window).ethereum as EthereumProvider;
-      const signature = await provider.request({
-        method: 'personal_sign',
-        params: [message, metamaskPublicKey],
-        jsonrpc: '2.0',
-        id: 1,
-      }) as string;
+      // --- Verify signer address --- 
+      try {
+          const signerAddress = await signer.getAddress();
+          console.log('[signMessageWithMetaMask] Successfully obtained signer address:', signerAddress);
+          if(signerAddress.toLowerCase() !== metamaskPublicKey.toLowerCase()) {
+              console.warn('[signMessageWithMetaMask] Signer address mismatch! Expected:', metamaskPublicKey, 'Got:', signerAddress);
+              // Decide if this is a critical error or just a warning
+              // throw new Error('MetaMask signer address does not match connected account.');
+          }
+      } catch (addrError) {
+          console.error('[signMessageWithMetaMask] Error getting signer address:', addrError);
+          throw new Error('Could not confirm signer address from MetaMask.');
+      }
+      // --- End Verify --- 
 
-      return signature;
+      console.log('[signMessageWithMetaMask] Signer obtained and address verified, requesting signature...');
+
+      // 3. Sign the message using the signer object
+      try {
+        const signature = await signer.signMessage(message);
+        console.log('[signMessageWithMetaMask] Signature obtained:', signature);
+        if (!signature) { // Add check for empty signature
+          throw new Error('MetaMask returned an empty signature.');
+        }
+        return signature;
+      } catch (signError) {
+        // Log the raw error first to see its structure
+        console.error('[signMessageWithMetaMask] Raw signing error object:', signError);
+        // Log stringified version for potentially more detail
+        try {
+          console.error('[signMessageWithMetaMask] Raw signing error (stringified):', JSON.stringify(signError, null, 2));
+        } catch (e) {
+          console.error('[signMessageWithMetaMask] Could not stringify signing error.');
+        }
+        
+        console.error('[signMessageWithMetaMask] Error during signer.signMessage:', signError);
+        // Use the defined type for checking the error code
+        if ((signError as MetaMaskError)?.code === 4001) { 
+          throw new Error('MetaMask signature request rejected by user.');
+        } else {
+          // Use the message from the typed error if available
+          throw new Error(`MetaMask signing failed: ${(signError as MetaMaskError)?.message || 'Unknown error'}`);
+        }
+      }
     } catch (error) {
-      console.error('Error signing message with MetaMask:', error);
-      toast({
+      console.error('[signMessageWithMetaMask] General error:', error);
+      // Re-throw the specific error caught or a generic one
+      toast({ // Add toast feedback for general errors too
         variant: "destructive",
-        title: "Signing Failed",
-        description: error instanceof Error ? error.message : "Failed to sign message with MetaMask.",
+        title: "Wallet Error",
+        description: error instanceof Error ? error.message : "An unexpected error occurred with your wallet.",
       });
-      throw error;
+      throw error instanceof Error ? error : new Error('Failed to sign message with MetaMask');
     }
   };
 

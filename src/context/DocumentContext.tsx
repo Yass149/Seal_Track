@@ -798,8 +798,18 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const addSignature = async (documentId: string, signerId: string, signatureDataUrl: string, signatureHash: string) => {
+    console.log(`[addSignature] Adding signature for DocID: ${documentId}, SignerID: ${signerId}`);
+    
+    // Pre-check: Ensure a valid signature hash was actually provided
+    if (!signatureHash || typeof signatureHash !== 'string' || signatureHash.length < 10) {
+        console.error('[addSignature] Error: Received invalid or empty signatureHash. Aborting update.', { signatureHash });
+        // Throw an error to be caught by the calling function (handleSignatureSubmit)
+        throw new Error('Cannot save signature: Invalid blockchain signature hash received.');
+    }
+    console.log('[addSignature] Received valid signatureHash, proceeding...');
+
     try {
-      console.log('Starting unified signature process for document:', documentId);
+      console.log('[addSignature] Starting unified signature process for document:', documentId);
       
       // First, fetch the current document state
       const { data: currentDoc, error: fetchError } = await supabase
@@ -923,15 +933,18 @@ export const DocumentProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
       toast({
         title: "Signature Added",
-        description: "Your signature has been securely added to the document and verified on the blockchain.",
+        description: "Your signature has been securely added.", // Removed mention of blockchain verification here, as it's a separate step
       });
+      console.log('[addSignature] Signature added successfully to database.');
+
     } catch (error) {
-      console.error('Error adding signature:', error);
+      console.error('[addSignature] Error adding signature:', error);
       toast({
-        title: "Signature Failed",
-        description: error instanceof Error ? error.message : "Failed to add signature",
+        title: "Saving Signature Failed",
+        description: error instanceof Error ? error.message : "Failed to save signature data to the database.",
         variant: "destructive",
       });
+      // Re-throw the error so the UI knows the operation failed
       throw error;
     }
   };

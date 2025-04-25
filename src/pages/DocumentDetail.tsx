@@ -165,43 +165,80 @@ const DocumentDetail = () => {
   };
 
   const handleSignatureSubmit = async (signatureDataUrl: string) => {
+    console.log('[handleSignatureSubmit] Starting submission...');
     try {
       if (!currentUserSigner) {
+        console.error('[handleSignatureSubmit] Error: No current user signer found.');
         throw new Error('You are not authorized to sign this document');
       }
+      console.log('[handleSignatureSubmit] Current User Signer:', currentUserSigner);
+
+      // Explicitly check wallet connection *before* hashing and signing
+      if (!metamaskConnected || !window.ethereum) {
+        console.error('[handleSignatureSubmit] Error: MetaMask is not connected or not available.');
+        toast({
+          variant: "destructive",
+          title: "Wallet Not Connected",
+          description: "Please ensure your MetaMask wallet is connected and try again.",
+        });
+        // Optionally attempt reconnection
+        // try { await connectMetaMaskWallet(); } catch { /* handle error */ }
+        return; // Stop the process if not connected
+      }
+      console.log('[handleSignatureSubmit] MetaMask connected, proceeding...');
 
       // Create a combined hash of document content and visual signature
       const combinedContent = JSON.stringify({
-        documentContent: document,
+        // Using a subset of document to avoid excessive length & ensure consistency
+        documentId: document.id,
+        documentTitle: document.title, 
+        // Consider adding more critical fields if needed for hash verification later
         visualSignature: signatureDataUrl,
         signerId: currentUserSigner.id,
         timestamp: new Date().toISOString()
       });
+      console.log('[handleSignatureSubmit] Content to hash:', combinedContent);
       
       // Calculate combined hash
       const combinedHash = ethers.utils.keccak256(
         ethers.utils.toUtf8Bytes(combinedContent)
       );
+      console.log('[handleSignatureSubmit] Calculated Combined Hash:', combinedHash);
       
       // Sign the combined hash with MetaMask
+      console.log('[handleSignatureSubmit] Requesting signature from MetaMask...');
       const signatureHash = await signMessageWithMetaMask(combinedHash);
+      console.log('[handleSignatureSubmit] Received Signature Hash:', signatureHash);
+
+      // CRITICAL: Check if signature hash is valid before proceeding
+      if (!signatureHash || typeof signatureHash !== 'string' || signatureHash.length < 10) { // Basic validity check
+          console.error('[handleSignatureSubmit] Error: Invalid or empty signature hash received from MetaMask.');
+          throw new Error('Failed to get a valid signature from MetaMask. Please ensure you approved the request in your wallet.');
+      }
+      console.log('[handleSignatureSubmit] Signature hash appears valid, proceeding to addSignature...');
 
       // Add both the visual signature and blockchain signature to the document
       await addSignature(document.id, currentUserSigner.id, signatureDataUrl, signatureHash);
 
-      toast({
-        title: "Document Signed",
-        description: "Your signature has been successfully added and verified on the blockchain.",
-      });
+      // The toast is now shown within addSignature upon successful DB update
+      // toast({
+      //   title: "Document Signed",
+      //   description: "Your signature has been successfully added and verified on the blockchain.",
+      // });
 
       setSignDialogOpen(false);
+      console.log('[handleSignatureSubmit] Submission complete.');
+
     } catch (error) {
-      console.error('Error signing document:', error);
+      console.error('[handleSignatureSubmit] Error signing document:', error);
       toast({
         variant: "destructive",
         title: "Signing Failed",
-        description: error instanceof Error ? error.message : "Failed to sign the document",
+        // Provide more specific error message if possible
+        description: error instanceof Error ? error.message : "An unexpected error occurred during signing.",
       });
+      // Optionally: Keep the dialog open on failure?
+      // setSignDialogOpen(true); 
     }
   };
 
