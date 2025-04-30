@@ -57,11 +57,15 @@ const Navbar: React.FC = () => {
     <nav className="bg-white border-b border-gray-200 px-4 py-2.5 sticky top-0 z-50">
       <div className="flex flex-wrap justify-between items-center">
         <div className="flex items-center">
-          <Link to="/" className="flex items-center">
-            <img src="/SealTrack.png" className="h-8 mr-2" alt="SealTrack Logo" />
-            <span className="text-xl font-semibold whitespace-nowrap text-sealtrack-primary">SealTrack</span>
+          <Link to="/" className="flex items-center mr-6">
+            <img 
+              src="/waaa.PNG" 
+              className="h-16 mr-2" 
+              alt="SealTrack Logo" 
+              style={{ transform: 'scale(1.5)', transformOrigin: 'center left' }}
+            />
           </Link>
-          <div className="hidden md:flex space-x-2">
+          <div className="hidden md:flex space-x-4">
             <Link to="/documents">
               <Button variant={isActive('/documents') ? 'default' : 'ghost'} className="gap-2">
                 <FileText className="w-4 h-4" />
