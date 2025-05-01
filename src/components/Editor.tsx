@@ -17,7 +17,6 @@ export function Editor({ value, onChange, placeholder }: EditorProps) {
       onInit={(_, editor) => {
         editorRef.current = { editor };
       }}
-      initialValue={value}
       value={value}
       onEditorChange={(newValue) => onChange(newValue)}
       init={{
@@ -65,13 +64,6 @@ export function Editor({ value, onChange, placeholder }: EditorProps) {
           h4: { block: 'h4' },
           h5: { block: 'h5' },
           h6: { block: 'h6' }
-        },
-        setup: function (editor) {
-          editor.on('init', function () {
-            if (value) {
-              editor.setContent(value);
-            }
-          });
         }
       }}
       className="min-h-[500px] border rounded-md"

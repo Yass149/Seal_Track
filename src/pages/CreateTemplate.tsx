@@ -46,7 +46,7 @@ export default function CreateTemplate() {
         description: "Template created successfully",
       });
 
-      navigate(`/templates/${templateId}`);
+      navigate('/templates');
     } catch (error) {
       toast({
         title: "Error",
