@@ -86,13 +86,13 @@ const Index = () => {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.6 }}
               >
-                <div className="flex -space-x-2">
+                <div className="flex -space-x-2 overflow-hidden">
                   {[1, 2, 3, 4].map((i) => (
-                    <img
-                      key={i}
-                      src={`/avatar-${i}.jpg`}
-                      alt="User"
-                      className="w-10 h-10 rounded-full border-2 border-white"
+                    <img 
+                      key={i} 
+                      src={`https://i.pravatar.cc/40?img=${i + 10}`}
+                      alt={`User ${i}`}
+                      className="w-10 h-10 rounded-full border-2 border-white object-cover bg-gray-200"
                     />
                   ))}
                 </div>
@@ -257,6 +257,7 @@ const Index = () => {
             <div>
               <h3 className="text-lg font-semibold mb-4">Product</h3>
               <ul className="space-y-2">
+                {/* TODO: Update hrefs for footer links */}
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Features</a></li>
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Security</a></li>
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Templates</a></li>
@@ -266,6 +267,7 @@ const Index = () => {
             <div>
               <h3 className="text-lg font-semibold mb-4">Company</h3>
               <ul className="space-y-2">
+                {/* TODO: Update hrefs for footer links */}
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">About</a></li>
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Blog</a></li>
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Careers</a></li>
@@ -275,6 +277,7 @@ const Index = () => {
             <div>
               <h3 className="text-lg font-semibold mb-4">Legal</h3>
               <ul className="space-y-2">
+                {/* TODO: Update hrefs for footer links */}
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Privacy</a></li>
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Terms</a></li>
                 <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Security</a></li>

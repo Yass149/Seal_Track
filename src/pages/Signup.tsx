@@ -62,16 +62,12 @@ const Signup = () => {
         className="w-full max-w-md z-10"
       >
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 text-2xl font-bold text-primary-600">
-            <svg
-              className="w-8 h-8"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              <path d="M6.75 5.25h10.5a1.5 1.5 0 0 1 1.5 1.5v10.5a1.5 1.5 0 0 1-1.5 1.5H6.75a1.5 1.5 0 0 1-1.5-1.5V6.75a1.5 1.5 0 0 1 1.5-1.5Z" />
-            </svg>
-            DocuChain
+          <Link to="/" className="inline-block">
+            <img 
+              src="/waaa.PNG" 
+              alt="SealTrack Logo" 
+              className="h-28 w-auto mx-auto"
+            />
           </Link>
         </div>
 
