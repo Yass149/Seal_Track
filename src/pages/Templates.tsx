@@ -101,7 +101,7 @@ const Templates = () => {
             <div className="md:col-span-2">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="All Categories" />
+                  <SelectValue placeholder="" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={undefined}>
